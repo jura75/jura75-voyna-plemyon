@@ -51,6 +51,9 @@ javascript:(function() {
             <button class="tw-hub-btn" data-action="7" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
                 🎯 <span>Сбор координат</span>
             </button>
+            <button class="tw-hub-btn" data-action="8" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                ⏱️ <span>Авто-тайм (Атака)</span>
+            </button>
         </div>
 
         <div style="background: #1a1006; padding: 5px 12px; font-size: 9px; color: #a98a5c; border-top: 1px solid #7d510f; text-align: right;">
@@ -99,14 +102,18 @@ javascript:(function() {
                     .then(eval)
                     .catch(err => alert('Ошибка загрузки скрипта: ' + err));
             } else if (actionId === '7') {
-                // Запуск сбора координат (сканер карты)[cite: 5]
                 fetch('https://raw.githack.com/jura75/voyna-plemyon-map-scanner/main/voyna-plemyon-map-scanner.js?_=' + Date.now())
                     .then(r => r.text())
                     .then(eval)
                     .catch(err => alert('Ошибка загрузки скрипта: ' + err));
+            } else if (actionId === '8') {
+                // Запуск вашего скрипта авто-тайма через Raw.Githack без точки в имени репозитория
+                const s = document.createElement('script');
+                s.src = 'https://raw.githack.com/jura75/jura75-voyna-plemyon/main/avto-attack-timer.js?_=' + Date.now();
+                document.head.appendChild(s);
             } else {
                 alert('Этот скрипт пока не добавлен!');
             }
         };
     });
-})();
+})();void(0);
