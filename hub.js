@@ -1,40 +1,72 @@
 javascript:(function() {
-    // Удаляем старое окно, если оно уже открыто
-    if ($('#my-custom-hub').length > 0) {
-        $('#my-custom-hub').remove();
+    let existing = document.getElementById('tw-custom-hub-panel');
+    if (existing) {
+        existing.remove();
         return;
     }
 
-    // Создаем HTML-окно меню в стиле Войны племён
-    const html = `
-        <div id="my-custom-hub" style="position: fixed; top: 100px; left: 100px; z-index: 99999; background: #e3d2b5; border: 2px solid #7d510f; padding: 10px; width: 250px; font-family: Verdana, Arial; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);">
-            <div style="background: #7d510f; color: #ffffff; padding: 5px; font-weight: bold; cursor: move; display: flex; justify-content: space-between; align-items: center;">
-                <span>🛠️ Проект Хаб</span>
-                <span id="close-hub" style="cursor: pointer; padding: 0 5px;">✖</span>
-            </div>
-            <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-                <button id="run-script-1" class="btn" style="cursor: pointer; padding: 5px;">Мульти-Планировщик</button>
-                <button id="run-script-2" class="btn" style="cursor: pointer; padding: 5px;">Тактический Хаб</button>
-            </div>
+    let panel = document.createElement('div');
+    panel.id = 'tw-custom-hub-panel';
+    panel.style.cssText = `
+        position: fixed;
+        top: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 300px;
+        background: #2b1d0c;
+        border: 3px solid #7d510f;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.8);
+        z-index: 99999;
+        font-family: Verdana, Arial, sans-serif;
+        color: #f4e4bc;
+        border-radius: 4px;
+        overflow: hidden;
+    `;
+
+    panel.innerHTML = `
+        <div style="background: #1a1006; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #7d510f;">
+            <b style="font-size: 12px; color: #f4e4bc;">🛠️ Проект Хаб</b>
+            <span id="tw-hub-close" style="cursor: pointer; color: #a63a3a; font-weight: bold; font-size: 14px; padding: 0 4px;">✕</span>
+        </div>
+        
+        <div style="padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+            <button class="tw-hub-btn" data-action="1" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                ⚡ <span>Мульти-Планировщик</span>
+            </button>
+            <button class="tw-hub-btn" data-action="2" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                🛡️ <span>Тактический Хаб</span>
+            </button>
+            <button class="tw-hub-btn" data-action="3" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                🌾 <span>Калькулятор ресурсов</span>
+            </button>
+        </div>
+
+        <div style="background: #1a1006; padding: 5px 12px; font-size: 9px; color: #a98a5c; border-top: 1px solid #7d510f; text-align: right;">
+            Статус: Панель активна
         </div>
     `;
 
-    $('body').append(html);
+    document.body.appendChild(panel);
 
-    // Закрытие окна по крестику
-    $('#close-hub').click(function() {
-        $('#my-custom-hub').remove();
-    });
+    // Закрытие по крестику
+    document.getElementById('tw-hub-close').onclick = () => panel.remove();
 
-    // Кнопка для первого скрипта (tw-snipe-planner.js)
-    $('#run-script-1').click(function() {
-        $('#my-custom-hub').remove();
-        $.getScript('https://raw.githubusercontent.com/jura75/voyna-plemyon.js/main/tw-snipe-planner.js');
-    });
+    // Реакция на нажатие кнопок
+    panel.querySelectorAll('.tw-hub-btn').forEach(btn => {
+        btn.onmouseover = () => { btn.style.background = '#5a3b0c'; btn.style.color = '#fff'; };
+        btn.onmouseout = () => { btn.style.background = '#3b2812'; btn.style.color = '#f4e4bc'; };
+        
+        btn.onclick = function() {
+            let actionId = this.getAttribute('data-action');
+            panel.remove(); // Закрываем меню перед запуском скрипта
 
-    // Кнопка для второго скрипта (tw-tactical-hub.js)
-    $('#run-script-2').click(function() {
-        $('#my-custom-hub').remove();
-        $.getScript('https://raw.githubusercontent.com/jura75/voyna-plemyon.js/main/tw-tactical-hub.js');
+            if (actionId === '1') {
+                $.getScript('https://raw.githack.com/jura75/jura75-voyna-plemyon.js/main/tw-snipe-planner.js');
+            } else if (actionId === '2') {
+                $.getScript('https://raw.githack.com/jura75/jura75-voyna-plemyon.js/main/tw-tactical-hub.js');
+            } else {
+                alert('Этот скрипт пока не добавлен в репозиторий!');
+            }
+        };
     });
 })();
