@@ -62,7 +62,6 @@ javascript:(function(){
             let vId = linkEl.length ? (linkEl.attr('href').match(/village=(\d+)/) || [])[1] : '';
             if(!vId) return;
 
-            // Надежный построчный поиск ресурсов (Дерево, Глина, Железо)
             let wEl = $r.find('.res.wood, .wood').first();
             let sEl = $r.find('.res.stone, .stone').first();
             let iEl = $r.find('.res.iron, .iron').first();
@@ -139,16 +138,22 @@ javascript:(function(){
                 st.html('<div id="rsTotalInfo" style="font-weight:bold;color:#804000;margin-bottom:4px;">📦 Всего отправлено ресурсов: 0</div>'+(cleanHtml?'<b>План на координаты ('+cnt+'):</b><br>'+cleanHtml:'Нет избытков'));
                 if(isAuto)$('#rsAuto').trigger('click');
             } else {
-                $.get(sfx + 'screen=overview_villages&mode=prod&group=' + tG + '&page=-1&', function(tP){
-                    let targets = [];
-                    parse($(tP), targets);
+                // Если выбрана та же самая группа (или загружаем отдельно для получателей, когда группы отличаются)
+                let getTargets = (targetsCallback) => {
+                    if (dG === tG) {
+                        targetsCallback(rawDonors);
+                    } else {
+                        $.get(sfx + 'screen=overview_villages&mode=prod&group=' + tG + '&page=-1&', function(tP){
+                            let targets = [];
+                            parse($(tP), targets);
+                            targetsCallback(targets);
+                        });
+                    }
+                };
+
+                getTargets(function(targets) {
                     if(!targets.length){ st.html('Нет получателей в выбранной группе'); return; }
                     
-                    let targetIds = new Set(targets.map(t => t.id));
-                    let donors = rawDonors.filter(d => !targetIds.has(d.id));
-
-                    if(!donors.length){ st.html('Все доноры входят в группу получателей (пересечение групп)'); return; }
-
                     targets.forEach(t => { 
                         t.vW = t.wood; t.vS = t.stone; t.vI = t.iron; 
                     });
@@ -156,7 +161,7 @@ javascript:(function(){
                     let html = '', cnt = 0;
                     
                     targets.forEach(t => {
-                        donors.forEach(d => {
+                        rawDonors.forEach(d => {
                             if(d.merchants <= 0 || d.id === t.id) return;
 
                             let kA = Math.floor(d.cap * kP);
@@ -197,7 +202,7 @@ javascript:(function(){
                         });
                     });
 
-                    st.html('<div id="rsTotalInfo" style="font-weight:bold;color:#804000;margin-bottom:4px;">📦 Всего отправлено ресурсов: 0</div>'+(html?'<b>План между группами ('+cnt+'):</b><br>'+html:'Нет избытков для отправки'));
+                    st.html('<div id="rsTotalInfo" style="font-weight:bold;color:#804000;margin-bottom:4px;">📦 Всего отправлено ресурсов: 0</div>'+(html?'<b>План распределения ('+cnt+'):</b><br>'+html:'Нет избытков для отправки'));
                     if(isAuto)$('#rsAuto').trigger('click');
                 });
             }
