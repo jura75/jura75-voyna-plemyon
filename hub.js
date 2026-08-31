@@ -39,6 +39,18 @@ javascript:(function() {
             <button class="tw-hub-btn" data-action="3" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
                 🌾 <span>Калькулятор ресурсов</span>
             </button>
+            <button class="tw-hub-btn" data-action="4" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                ⚖️ <span>Авто-балансёр</span>
+            </button>
+            <button class="tw-hub-btn" data-action="5" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                🗺️ <span>Маркер карты</span>
+            </button>
+            <button class="tw-hub-btn" data-action="6" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                👁️ <span>Смотр атак</span>
+            </button>
+            <button class="tw-hub-btn" data-action="7" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                🎯 <span>Сбор координат</span>
+            </button>
         </div>
 
         <div style="background: #1a1006; padding: 5px 12px; font-size: 9px; color: #a98a5c; border-top: 1px solid #7d510f; text-align: right;">
@@ -64,8 +76,36 @@ javascript:(function() {
                 $.getScript('https://raw.githack.com/jura75/jura75-voyna-plemyon.js/main/tw-snipe-planner.js');
             } else if (actionId === '2') {
                 $.getScript('https://raw.githack.com/jura75/jura75-voyna-plemyon.js/main/tw-tactical-hub.js');
+            } else if (actionId === '3') {
+                $.getScript('https://raw.githack.com/jura75/resource_balancer.js/main/balancer.js');
+            } else if (actionId === '4') {
+                if (typeof game_data === 'undefined' || game_data.screen !== 'overview_villages') {
+                    alert("Откройте 'Обзор деревень'");
+                    return;
+                }
+                const id = 'twRS';
+                if ($('#' + id).length) {
+                    $('#' + id).toggle();
+                    return;
+                }
+                const s = document.createElement('script');
+                s.src = 'https://raw.githack.com/jura75/avto-resource_balancer.js/main/avto-resource_balancer.js?_=' + Date.now();
+                document.head.appendChild(s);
+            } else if (actionId === '5') {
+                $.getScript('https://raw.githack.com/jura75/tw-pro-toolkit/refs/heads/main/notes-parser.js?_=' + Date.now());
+            } else if (actionId === '6') {
+                fetch('https://raw.githack.com/jura75/tw-attack-timer.js/main/tw-attack-timer.js?_=' + Date.now())
+                    .then(r => r.text())
+                    .then(eval)
+                    .catch(err => alert('Ошибка загрузки скрипта: ' + err));
+            } else if (actionId === '7') {
+                // Запуск сбора координат (сканер карты)[cite: 5]
+                fetch('https://raw.githack.com/jura75/voyna-plemyon-map-scanner/main/voyna-plemyon-map-scanner.js?_=' + Date.now())
+                    .then(r => r.text())
+                    .then(eval)
+                    .catch(err => alert('Ошибка загрузки скрипта: ' + err));
             } else {
-                alert('Этот скрипт пока не добавлен в репозиторий!');
+                alert('Этот скрипт пока не добавлен!');
             }
         };
     });
