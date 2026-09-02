@@ -30,6 +30,9 @@ javascript:(function() {
         </div>
         
         <div style="padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+            <button class="tw-hub-btn" data-action="manager" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
+                📋 <span>Менеджер приказов-планировщик</span>
+            </button>
             <button class="tw-hub-btn" data-action="1" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
                 ⚡ <span>Мульти-Планировщик</span>
             </button>
@@ -78,7 +81,11 @@ javascript:(function() {
             let actionId = this.getAttribute('data-action');
             panel.remove(); // Закрываем меню перед запуском скрипта
 
-            if (actionId === '1') {
+            if (actionId === 'manager') {
+                const s = document.createElement('script');
+                s.src = 'https://raw.githack.com/jura75/jura75-voyna-plemyon/main/Manager-orders-planner.js';
+                document.head.appendChild(s);
+            } else if (actionId === '1') {
                 $.getScript('https://raw.githack.com/jura75/jura75-voyna-plemyon.js/main/tw-snipe-planner.js');
             } else if (actionId === '2') {
                 $.getScript('https://raw.githack.com/jura75/jura75-voyna-plemyon.js/main/tw-tactical-hub.js');
