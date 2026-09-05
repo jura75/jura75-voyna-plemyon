@@ -6,7 +6,7 @@
         if (match && match[1]) {
             return match[1];
         }
-        return 'ru103';
+        return 'ru106';
     }
 
     const currentWorld = getCurrentWorldServer();
