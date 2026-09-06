@@ -1,20 +1,4 @@
-// ==UserScript==
-// @name         Tribal Wars Mass Sniper
-// @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Масс-снайп для Войны племён с панелью управления и автоотправкой
-// @author       You
-// @match        https://*.plemiona.pl/*
-// @match        https://*.vojnaplemeni.cz/*
-// @match        https://*.griefergames.de/*
-// @match        https://*.tribalwars.net/*
-// @match        https://*.voynaplemen.com/*
-// @match        https://*.staemme.ch/*
-// @match        https://*.die-staemme.de/*
-// @grant        none
-// ==/UserScript==
-
-javascript:(function() {
+(function() {
     'use strict';
 
     if (typeof game_data === 'undefined') {
