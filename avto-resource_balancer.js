@@ -1,14 +1,32 @@
-(function(){
+// ==UserScript==
+// @name         Tribal Wars Mass Sniper
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Масс-снайп для Войны племён с панелью управления и автоотправкой
+// @author       You
+// @match        https://*.plemiona.pl/*
+// @match        https://*.vojnaplemeni.cz/*
+// @match        https://*.griefergames.de/*
+// @match        https://*.tribalwars.net/*
+// @match        https://*.voynaplemen.com/*
+// @match        https://*.staemme.ch/*
+// @match        https://*.die-staemme.de/*
+// @grant        none
+// ==/UserScript==
+
+javascript:(function() {
+    'use strict';
+
     if (typeof game_data === 'undefined') {
         alert("Ошибка: скрипт запущен вне игры!");
         return;
     }
 
     let loadVal = (k, def) => {
-        try { return localStorage.getItem('tw_snipe_'+k) !== null ? localStorage.getItem('tw_snipe_'+k) : def; } catch(e) { return def; }
+        try { return localStorage.getItem('tw_snipe_' + k) !== null ? localStorage.getItem('tw_snipe_' + k) : def; } catch(e) { return def; }
     };
     let saveVal = (k, v) => {
-        try { localStorage.setItem('tw_snipe_'+k, v); } catch(e) {}
+        try { localStorage.setItem('tw_snipe_' + k, v); } catch(e) {}
     };
 
     // ФОНОВЫЙ АВТО-ОБРАБОТЧИК (РАБОТАЕТ ПОСТОЯННО, ЕСЛИ ВКЛЮЧЕН ПУСК)
@@ -17,7 +35,7 @@
         
         setInterval(function() {
             let isAutoActive = localStorage.getItem('tw_snipe_autorun') === 'true';
-            if (!isAutoActive) return; // Если ПУСК выключен — ничего не делаем автоматически
+            if (!isAutoActive) return;
 
             let screen = typeof game_data !== 'undefined' ? game_data.screen : '';
             let urlParams = new URLSearchParams(window.location.search);
@@ -30,7 +48,7 @@
                     window.tw_snipe_confirm_handled = true;
                     let targetTimeMs = parseInt(localStorage.getItem('tw_snipe_active_target_time') || '0', 10);
                     
-                    function waitAndClickConfirm(){
+                    function waitAndClickConfirm() {
                         let now = new Date().getTime();
                         let diff = targetTimeMs - now;
                         if (diff <= 50) {
@@ -55,7 +73,7 @@
                 return;
             }
 
-            // АВТОМАТИКА НА СТРАНИЦЕ ПЛОЩАДИ (ЗАПОЛНЕНИЕ И ОТПРАВКА К СОБАКЕ/ЦЕЛИ)
+            // АВТОМАТИКА НА СТРАНИЦЕ ПЛОЩАДИ (ЗАПОЛНЕНИЕ И ОТПРАВКА)
             if (screen === 'place' && !tryParam) {
                 let targetX = urlParams.get('x');
                 let targetY = urlParams.get('y');
@@ -64,7 +82,7 @@
                     window.tw_snipe_place_handled = true;
                     
                     let attempts = 0;
-                    let fillInterval = setInterval(function(){
+                    let fillInterval = setInterval(function() {
                         attempts++;
                         let xInput = document.querySelector('input[name="x"]');
                         if (xInput || attempts > 100) {
@@ -78,9 +96,9 @@
                                 }
                             });
 
-                            let unitsList = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
+                            let unitsList = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
                             unitsList.forEach(u => {
-                                let val = urlParams.get('u_'+u);
+                                let val = urlParams.get('u_' + u);
                                 if (val && val !== '0') {
                                     let inputEl = document.getElementById('unit_input_' + u);
                                     if (inputEl) {
@@ -110,7 +128,6 @@
                     }, 30);
                 }
 
-                // Логика перехода к следующей деревне из списка по таймеру
                 let savedList = JSON.parse(localStorage.getItem('tw_snipe_plan_list') || '[]');
                 let now = new Date().getTime();
                 
@@ -148,7 +165,7 @@
         }, 500);
     }
 
-    // РАЗОВОЕ СРАБАТЫВАНИЕ ПРИ РУЧНОМ ЗАПУСКЕ (ЕСЛИ ВЫЗВАЛИ НА ЭТИХ СТРАНИЦАХ ПРЯМО СЕЙЧАС)
+    // РАЗОВОЕ СРАБАТЫВАНИЕ / ОТКРЫТИЕ ПАНЕЛИ УПРАВЛЕНИЯ
     let screen = game_data.screen;
     let urlParams = new URLSearchParams(window.location.search);
     let tryParam = urlParams.get('try');
@@ -156,7 +173,7 @@
     let btnConfirm = document.getElementById('troop_confirm_submit') || document.getElementById('btn_submit');
     if (btnConfirm && tryParam === 'confirm') {
         let targetTimeMs = parseInt(localStorage.getItem('tw_snipe_active_target_time') || '0', 10);
-        function waitAndClickConfirm(){
+        function waitAndClickConfirm() {
             let now = new Date().getTime();
             let diff = targetTimeMs - now;
             if (diff <= 50) {
@@ -175,7 +192,6 @@
         return;
     }
 
-    // 3. ПАНЕЛЬ УПРАВЛЕНИЯ (ОБЫЧНОЕ ОТКРЫТИЕ ПО КЛИКУ НА СКРИПТ)
     let p = document.getElementById('twSnipe');
     if (p) {
         p.style.display = p.style.display === 'none' ? 'block' : 'none';
@@ -245,7 +261,7 @@
     let num = s => parseInt(String(s).replace(/\D/g,''), 10) || 0;
     let speeds = {spear:18, sword:22, axe:18, archer:18, spy:9, light:10, marcher:10, heavy:11, ram:30, catapult:30, knight:10, snob:35};
 
-    function saveInputs(){
+    function saveInputs() {
         saveVal('coord', document.getElementById('snipeCoord').value.trim());
         saveVal('attacksPerTarget', document.getElementById('attacksPerTarget').value);
         saveVal('attacksPerSource', document.getElementById('attacksPerSource').value);
@@ -262,7 +278,7 @@
         });
     }
 
-    function updateRunButtonState(){
+    function updateRunButtonState() {
         let isRunning = localStorage.getItem('tw_snipe_autorun') === 'true';
         let autoBtn = document.getElementById('snipeToggleAuto');
         if (autoBtn) {
@@ -277,7 +293,7 @@
     }
     updateRunButtonState();
 
-    document.getElementById('snipeClearPlan').onclick = function(){
+    document.getElementById('snipeClearPlan').onclick = function() {
         localStorage.removeItem('tw_snipe_plan_list');
         localStorage.setItem('tw_snipe_autorun', 'false');
         localStorage.removeItem('tw_snipe_active_target_time');
@@ -288,7 +304,7 @@
         if (cntEl) cntEl.innerText = '0';
     };
 
-    document.getElementById('snipeToggleAuto').onclick = function(){
+    document.getElementById('snipeToggleAuto').onclick = function() {
         let isRunning = localStorage.getItem('tw_snipe_autorun') === 'true';
         if (isRunning) {
             localStorage.setItem('tw_snipe_autorun', 'false');
@@ -303,7 +319,7 @@
         updateRunButtonState();
     };
 
-    document.getElementById('snipeCalc').onclick = function(){
+    document.getElementById('snipeCalc').onclick = function() {
         saveInputs();
         let template = {};
         ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'].forEach(u => {
@@ -453,7 +469,7 @@
             });
     };
 
-    function renderListInPanel(){
+    function renderListInPanel() {
         let rowsContainer = document.getElementById('snipeRowsContainer');
         let countEl = document.getElementById('snipeCount');
         if (!rowsContainer) return;
