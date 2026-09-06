@@ -33,10 +33,46 @@ javascript:(function(){
 
     let num = s => parseInt(String(s).replace(/\./g,'').replace(/\s/g,''), 10) || 0;
 
-    window.rsSend = function(b, sId, tId, w, st, i, c) {
+    // Функция поиска ID деревни по координатам из карты игры или базы
+    function getVillageIdByCoord(coordStr) {
+        if (typeof TWMap !== 'undefined' && TWMap.villages) {
+            for (let id in TWMap.villages) {
+                let v = TWMap.villages[id];
+                if (v.xy === coordStr || (v.x + '|' + v.y) === coordStr) {
+                    return id;
+                }
+            }
+        }
+        // Запасной поиск через глобальные объекты, если карта прогружена частично
+        if (typeof game_data !== 'undefined' && game_data.market && game_data.market.villages) {
+            let v = game_data.market.villages[coordStr];
+            if (v) return v.id;
+        }
+        return null;
+    }
+
+    window.rsSend = function(b, sId, tIdOrCoord, w, st, i) {
         $(b).prop('disabled', true).text('⏳');
         let pl = {wood: w, stone: st, iron: i};
-        if(c){ let cp = c.split('|'); pl.x = cp[0]; pl.y = cp[1]; } else { pl.target_id = tId; }
+        
+        let targetId = tIdOrCoord;
+        // Если переданные данные являются координатами, находим их ID
+        if (typeof tIdOrCoord === 'string' && tIdOrCoord.includes('|')) {
+            let resolvedId = getVillageIdByCoord(tIdOrCoord);
+            if (resolvedId) {
+                targetId = resolvedId;
+            } else {
+                // Если в кэше карты нет, пробуем отправить через парсинг координат напрямую через ajax-ручку маркетплейса
+                let cp = tIdOrCoord.split('|');
+                pl.x = cp[0];
+                pl.y = cp[1];
+            }
+        }
+        
+        if (targetId && !targetId.toString().includes('|')) {
+            pl.target_id = targetId;
+        }
+
         TribalWars.post('market', {ajaxaction: 'map_send', village: sId}, pl, function(){
             $(b).text('✓').css('background', '#28a745');
             let sum = w + st + i;
@@ -132,13 +168,31 @@ javascript:(function(){
                     let tc = coordList[cIdx % coordList.length]; cIdx++;
                     let maxM = d.merchants * 1000;
                     if(tot > maxM){ let r = maxM / tot; sW = Math.floor(sW * r); sS = Math.floor(sS * r); sI = Math.floor(sI * r); }
+                    cleanHtml += '<div style="border-bottom:1px solid #dfcca6;padding:3px 0;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;"><b>'+d.name+'</b> &rarr; <b>['+tc+']</b><br>Д:'+sW+' Г:'+sS+' Ж:'+sI+'</span><button onclick="rsSend(this,\''+d.id+'\',\''+tc+'\'+,\''+sW+','+sS+','+sI+')" style="background:#28a745;color:#fff;border:none;padding:3px 6px;cursor:pointer;border-radius:3px;font-weight:bold;">Отправить</button></div>';
+                    // Исправлен вызов кнопки отправки ниже без синтаксических ошибок в строках:
+                    cleanHtml = cleanHtml.replace(/,'\+\+,'/g, ',');
+                    cnt++;
+                });
+                
+                // Перегенерируем чистый HTML вывод для координат без ошибок конкатенации
+                cleanHtml = ''; cIdx = 0; cnt = 0;
+                rawDonors.forEach(d => {
+                    let kA = Math.floor(d.cap * kP);
+                    let sW = Math.max(0, d.wood - kA), sS = Math.max(0, d.stone - kA), sI = Math.max(0, d.iron - kA);
+                    let tot = sW + sS + sI;
+                    if(tot <= 200 || d.merchants <= 0) return;
+                    let tc = coordList[cIdx % coordList.length]; cIdx++;
+                    let maxM = d.merchants * 1000;
+                    if(tot > maxM){ let r = maxM / tot; sW = Math.floor(sW * r); sS = Math.floor(sS * r); sI = Math.floor(sI * r); tot = sW + sS + sI; }
+                    if(tot <= 200) return;
+                    
                     cleanHtml += '<div style="border-bottom:1px solid #dfcca6;padding:3px 0;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;"><b>'+d.name+'</b> &rarr; <b>['+tc+']</b><br>Д:'+sW+' Г:'+sS+' Ж:'+sI+'</span><button onclick="rsSend(this,\''+d.id+'\',\''+tc+'\','+sW+','+sS+','+sI+')" style="background:#28a745;color:#fff;border:none;padding:3px 6px;cursor:pointer;border-radius:3px;font-weight:bold;">Отправить</button></div>';
                     cnt++;
                 });
+
                 st.html('<div id="rsTotalInfo" style="font-weight:bold;color:#804000;margin-bottom:4px;">📦 Всего отправлено ресурсов: 0</div>'+(cleanHtml?'<b>План на координаты ('+cnt+'):</b><br>'+cleanHtml:'Нет избытков'));
                 if(isAuto)$('#rsAuto').trigger('click');
             } else {
-                // Если выбрана та же самая группа (или загружаем отдельно для получателей, когда группы отличаются)
                 let getTargets = (targetsCallback) => {
                     if (dG === tG) {
                         targetsCallback(rawDonors);
