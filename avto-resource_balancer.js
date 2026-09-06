@@ -11,106 +11,106 @@
         try { localStorage.setItem('tw_snipe_'+k, v); } catch(e) {}
     };
 
-    let screen = game_data.screen;
-    let isAutoActive = localStorage.getItem('tw_snipe_autorun') === 'true';
-
-    // 0. АВТО-ИНЪЕКЦИЯ НА ПЛОЩАДИ ПРИ ВКЛЮЧЕННОМ ПУСКЕ
-    if (screen === 'place' && isAutoActive && !window.tw_snipe_auto_inited) {
-        window.tw_snipe_auto_inited = true;
-        runPlaceAutomation();
-    }
-
-    // 1. ЕСЛИ МЫ НА ЭКРАНЕ ПОДТВЕРЖДЕНИЯ АТАКИ
-    let btnConfirm = document.getElementById('troop_confirm_submit') || document.getElementById('btn_submit');
-    if (btnConfirm) {
-        let targetTimeMs = parseInt(localStorage.getItem('tw_snipe_active_target_time') || '0', 10);
+    // ФОНОВЫЙ АВТО-ОБРАБОТЧИК (РАБОТАЕТ ПОСТОЯННО, ЕСЛИ ВКЛЮЧЕН ПУСК)
+    if (!window.tw_snipe_global_watcher_started) {
+        window.tw_snipe_global_watcher_started = true;
         
-        function waitAndClickConfirm(){
-            let now = new Date().getTime();
-            let diff = targetTimeMs - now;
-            if (diff <= 50) {
-                let savedList = JSON.parse(localStorage.getItem('tw_snipe_plan_list') || '[]');
-                if (savedList.length > 0) {
-                    savedList.shift();
-                    localStorage.setItem('tw_snipe_plan_list', JSON.stringify(savedList));
-                }
-                localStorage.removeItem('tw_snipe_active_target_time');
-                btnConfirm.click();
-            } else {
-                setTimeout(waitAndClickConfirm, 5);
-            }
-        }
-        
-        if (targetTimeMs > 0) {
-            waitAndClickConfirm();
-        } else {
-            btnConfirm.click();
-        }
-        return;
-    }
+        setInterval(function() {
+            let isAutoActive = localStorage.getItem('tw_snipe_autorun') === 'true';
+            if (!isAutoActive) return; // Если ПУСК выключен — ничего не делаем автоматически
 
-    // Функция автоматизации на площади
-    function runPlaceAutomation() {
-        let urlParams = new URLSearchParams(window.location.search);
-        let targetX = urlParams.get('x');
-        let targetY = urlParams.get('y');
+            let screen = typeof game_data !== 'undefined' ? game_data.screen : '';
+            let urlParams = new URLSearchParams(window.location.search);
+            let tryParam = urlParams.get('try');
 
-        if (targetX && targetY) {
-            let attempts = 0;
-            let fillInterval = setInterval(function(){
-                attempts++;
-                let xInput = document.querySelector('input[name="x"]');
-                if (xInput || attempts > 100) {
-                    clearInterval(fillInterval);
-                    ['x', 'y'].forEach(coordName => {
-                        let inp = document.querySelector('input[name="' + coordName + '"]');
-                        if (inp && typeof window.jQuery !== 'undefined') {
-                            window.jQuery(inp).val(coordName === 'x' ? targetX : targetY).trigger('change').trigger('input').trigger('blur');
-                        } else if (inp) {
-                            inp.value = coordName === 'x' ? targetX : targetY;
-                        }
-                    });
-
-                    let unitsList = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
-                    unitsList.forEach(u => {
-                        let val = urlParams.get('u_'+u);
-                        if (val && val !== '0') {
-                            let inputEl = document.getElementById('unit_input_' + u);
-                            if (inputEl) {
-                                if (typeof window.jQuery !== 'undefined') {
-                                    window.jQuery(inputEl).val(val).trigger('input').trigger('change').trigger('keyup');
-                                } else {
-                                    inputEl.value = val;
-                                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-                                    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
-                                }
+            // АВТОМАТИКА НА ЭКРАНЕ ПОДТВЕРЖДЕНИЯ АТАКИ (?screen=place&try=confirm)
+            if (screen === 'place' && tryParam === 'confirm') {
+                let btnConfirm = document.getElementById('troop_confirm_submit') || document.getElementById('btn_submit');
+                if (btnConfirm && !window.tw_snipe_confirm_handled) {
+                    window.tw_snipe_confirm_handled = true;
+                    let targetTimeMs = parseInt(localStorage.getItem('tw_snipe_active_target_time') || '0', 10);
+                    
+                    function waitAndClickConfirm(){
+                        let now = new Date().getTime();
+                        let diff = targetTimeMs - now;
+                        if (diff <= 50) {
+                            let savedList = JSON.parse(localStorage.getItem('tw_snipe_plan_list') || '[]');
+                            if (savedList.length > 0) {
+                                savedList.shift();
+                                localStorage.setItem('tw_snipe_plan_list', JSON.stringify(savedList));
                             }
+                            localStorage.removeItem('tw_snipe_active_target_time');
+                            btnConfirm.click();
+                        } else {
+                            setTimeout(waitAndClickConfirm, 5);
                         }
-                    });
-
-                    let sdParam = urlParams.get('target_time');
-                    if (sdParam) {
-                        localStorage.setItem('tw_snipe_active_target_time', sdParam);
                     }
-
-                    setTimeout(() => {
-                        let btnAttack = document.querySelector('#target_attack') || document.querySelector('#btn_attack') || document.querySelector('input.btn-attack');
-                        if (btnAttack) {
-                            btnAttack.click();
-                        }
-                    }, 250);
+                    
+                    if (targetTimeMs > 0) {
+                        waitAndClickConfirm();
+                    } else {
+                        btnConfirm.click();
+                    }
                 }
-            }, 30);
-        }
-    }
+                return;
+            }
 
-    // 2. ЕСЛИ МЫ НА СТРАНИЦЕ ПЛОЩАДИ (Обычный запуск или ручной переход)
-    if (screen === 'place') {
-        runPlaceAutomation();
+            // АВТОМАТИКА НА СТРАНИЦЕ ПЛОЩАДИ (ЗАПОЛНЕНИЕ И ОТПРАВКА К СОБАКЕ/ЦЕЛИ)
+            if (screen === 'place' && !tryParam) {
+                let targetX = urlParams.get('x');
+                let targetY = urlParams.get('y');
+                
+                if (targetX && targetY && !window.tw_snipe_place_handled) {
+                    window.tw_snipe_place_handled = true;
+                    
+                    let attempts = 0;
+                    let fillInterval = setInterval(function(){
+                        attempts++;
+                        let xInput = document.querySelector('input[name="x"]');
+                        if (xInput || attempts > 100) {
+                            clearInterval(fillInterval);
+                            ['x', 'y'].forEach(coordName => {
+                                let inp = document.querySelector('input[name="' + coordName + '"]');
+                                if (inp && typeof window.jQuery !== 'undefined') {
+                                    window.jQuery(inp).val(coordName === 'x' ? targetX : targetY).trigger('change').trigger('input').trigger('blur');
+                                } else if (inp) {
+                                    inp.value = coordName === 'x' ? targetX : targetY;
+                                }
+                            });
 
-        // Авто-фоновый цикл переходов к следующей деревне из списка
-        if (isAutoActive) {
-            let autoInterval = setInterval(function(){
+                            let unitsList = ['spear','sword','axe','archer','spy','light','marcher','heavy','ram','catapult','knight','snob'];
+                            unitsList.forEach(u => {
+                                let val = urlParams.get('u_'+u);
+                                if (val && val !== '0') {
+                                    let inputEl = document.getElementById('unit_input_' + u);
+                                    if (inputEl) {
+                                        if (typeof window.jQuery !== 'undefined') {
+                                            window.jQuery(inputEl).val(val).trigger('input').trigger('change').trigger('keyup');
+                                        } else {
+                                            inputEl.value = val;
+                                            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                                            inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+                                        }
+                                    }
+                                }
+                            });
+
+                            let sdParam = urlParams.get('target_time');
+                            if (sdParam) {
+                                localStorage.setItem('tw_snipe_active_target_time', sdParam);
+                            }
+
+                            setTimeout(() => {
+                                let btnAttack = document.querySelector('#target_attack') || document.querySelector('#btn_attack') || document.querySelector('input.btn-attack');
+                                if (btnAttack) {
+                                    btnAttack.click();
+                                }
+                            }, 250);
+                        }
+                    }, 30);
+                }
+
+                // Логика перехода к следующей деревне из списка по таймеру
                 let savedList = JSON.parse(localStorage.getItem('tw_snipe_plan_list') || '[]');
                 let now = new Date().getTime();
                 
@@ -119,7 +119,6 @@
 
                 if (savedList.length === 0) {
                     localStorage.setItem('tw_snipe_autorun', 'false');
-                    clearInterval(autoInterval);
                     return;
                 }
 
@@ -130,7 +129,6 @@
                 if (diffSec <= 20 && diffSec >= -2) {
                     let currentVillageId = game_data.village.id;
                     if (String(currentVillageId) !== String(nextItem.village.id)) {
-                        clearInterval(autoInterval);
                         let placeParams = [];
                         if (typeof game_data.player.sitter !== 'undefined' && game_data.player.sitter > 0) placeParams.push('t=' + game_data.player.id);
                         placeParams.push('village=' + nextItem.village.id);
@@ -146,11 +144,38 @@
                         window.location.href = 'game.php?' + placeParams.join('&');
                     }
                 }
-            }, 500);
-        }
+            }
+        }, 500);
     }
 
-    // 3. ПАНЕЛЬ УПРАВЛЕНИЯ
+    // РАЗОВОЕ СРАБАТЫВАНИЕ ПРИ РУЧНОМ ЗАПУСКЕ (ЕСЛИ ВЫЗВАЛИ НА ЭТИХ СТРАНИЦАХ ПРЯМО СЕЙЧАС)
+    let screen = game_data.screen;
+    let urlParams = new URLSearchParams(window.location.search);
+    let tryParam = urlParams.get('try');
+
+    let btnConfirm = document.getElementById('troop_confirm_submit') || document.getElementById('btn_submit');
+    if (btnConfirm && tryParam === 'confirm') {
+        let targetTimeMs = parseInt(localStorage.getItem('tw_snipe_active_target_time') || '0', 10);
+        function waitAndClickConfirm(){
+            let now = new Date().getTime();
+            let diff = targetTimeMs - now;
+            if (diff <= 50) {
+                let savedList = JSON.parse(localStorage.getItem('tw_snipe_plan_list') || '[]');
+                if (savedList.length > 0) {
+                    savedList.shift();
+                    localStorage.setItem('tw_snipe_plan_list', JSON.stringify(savedList));
+                }
+                localStorage.removeItem('tw_snipe_active_target_time');
+                btnConfirm.click();
+            } else {
+                setTimeout(waitAndClickConfirm, 5);
+            }
+        }
+        if (targetTimeMs > 0) waitAndClickConfirm(); else btnConfirm.click();
+        return;
+    }
+
+    // 3. ПАНЕЛЬ УПРАВЛЕНИЯ (ОБЫЧНОЕ ОТКРЫТИЕ ПО КЛИКУ НА СКРИПТ)
     let p = document.getElementById('twSnipe');
     if (p) {
         p.style.display = p.style.display === 'none' ? 'block' : 'none';
