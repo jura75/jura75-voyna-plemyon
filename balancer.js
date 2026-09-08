@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Балансировщик склада (Shinko to Kuma) - Авто-парсинг групп v13.3
 // @namespace    https://www.shinko-to-kuma.com/ 
-// @version      13.3-RU
+// @version      13.4-RU
 // @author       Sophie "Shinko to Kuma" (Modified)
 // @match        https://*.tribalwars.net/game.php*
 // @match        https://*.vojnaplemen.cz/game.php*
