@@ -90,7 +90,9 @@ javascript:(function() {
             } else if (actionId === '2') {
                 $.getScript('https://raw.githack.com/jura75/jura75-voyna-plemyon.js/main/tw-tactical-hub.js');
             } else if (actionId === '3') {
-                $.getScript('https://raw.githack.com/jura75/resource_balancer.js/main/balancer.js');
+                const s = document.createElement('script');
+                s.src = 'https://raw.githack.com/jura75/jura75-voyna-plemyon/main/balancer.js?_=' + Date.now();
+                document.head.appendChild(s);
             } else if (actionId === '4') {
                 if (typeof game_data === 'undefined' || game_data.screen !== 'overview_villages') {
                     alert("Откройте 'Обзор деревень'");
