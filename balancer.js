@@ -1,6 +1,6 @@
 //script by Sophie "Shinko to Kuma". discord: Sophie#2418 website: https://www.shinko-to-kuma.com/
-//Updated with robust manual and dynamic group parsing and page=-1 fix
-console.log("Latest update: 20 March 2026 - Sophie 'Shinko to Kuma' / Integrated Group Parsing Fix");
+//Updated with robust manual and dynamic group parsing, page=-1 fix, and Auto-Send integration
+console.log("Latest update: 20 March 2026 - Sophie 'Shinko to Kuma' / Integrated Group Parsing & Auto-Send Fix");
 var testPage;
 var is_mobile = !!navigator.userAgent.match(/iphone|android|blackberry/ig) || false;
 var warehouseCapacity = [];
@@ -171,7 +171,9 @@ function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, r
         }, e, function (e) {
             UI.SuccessMessage(e.message);
             console.log(e.message);
-            $(':button[id^="building"]')[0].focus();
+            if ($(':button[id^="building"]').length > 0) {
+                $(':button[id^="building"]')[0].focus();
+            }
         },
         !1
     );
@@ -183,8 +185,37 @@ function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, r
             if ($(".btn-pp").length > 0) { $(".btn-pp").remove(); }
             throw Error("Done.");
         }
-        $(':button[id^="building"]')[0].focus();
+        if ($(':button[id^="building"]').length > 0) {
+            $(':button[id^="building"]')[0].focus();
+        }
     }, 150);
+}
+
+// Функция автоматической отправки ресурсов
+function autoSendResources() {
+    var buttons = $(':button[id^="building"]');
+    if (buttons.length === 0) {
+        UI.ErrorMessage("Нет доступных отправлений!");
+        return;
+    }
+    UI.SuccessMessage("Запущена автоматическая отправка ресурсов...");
+    let index = 0;
+    function sendNext() {
+        if (index >= buttons.length) {
+            UI.SuccessMessage("Все ресурсы успешно отправлены!");
+            return;
+        }
+        let btn = buttons[index];
+        if (btn && !btn.disabled) {
+            btn.click();
+            index++;
+            setTimeout(sendNext, 250);
+        } else {
+            index++;
+            setTimeout(sendNext, 50);
+        }
+    }
+    sendNext();
 }
 
 function displayEverything() {
@@ -240,7 +271,7 @@ function displayEverything() {
         }).done(function (page) {
             testPage = page;
             
-            // --- УЛУЧШЕННЫЙ ПАРСИНГ ГРУПП (с загружаемой страницы и текущего документа) ---
+            // --- УЛУЧШЕННЫЙ ПАРСИНГ ГРУПП ---
             var availableGroups = [];
             var availableGroupsMap = {};
             function extractGroups($container) {
@@ -616,10 +647,11 @@ function displayEverything() {
                             <tr><td style="padding: 6px;"><label for="builtOutPercentage">Вместимость склада (горизонт. деревни): </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.builtOutPercentage}" class="slider" name="builtOutPercentage" oninput="sliderChange('builtOutPercentage',this.value)"><output id="builtOutPercentage"></output></td></tr>
                             <tr><td style="padding: 6px;"><label for="needsMorePercentage">Вместимость склада (приорит. деревни): </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.needsMorePercentage}" class="slider" name="needsMorePercentage" oninput="sliderChange('needsMorePercentage',this.value)"><output id="needsMorePercentage"></output></td></tr>
                             <tr><td style="padding: 6px;"><input type="button" class="btn evt-confirm-btn btn-confirm-yes" value="Сохранить" onclick="saveSettings();"/></td></tr>
-                            <tr><td colspan="2" style="padding: 6px;"><p style="padding:5px"><font size="1">Скрипт от Sophie "Shinko to Kuma"</font></p></td></tr>
+                            <tr><td colspan="2" style="padding: 6px; text-align: center;"><input type="button" class="btn btnSophie btn-confirm-yes" value="Автоотправка" onclick="autoSendResources();" style="width: 100%; padding: 6px;"/></td></tr>
                             </table>
                         </form>
                     </div>
+                    <input type="button" class="btn btnSophie btn-confirm-yes" value="Автоотправка" onclick="autoSendResources();" style="margin-right: 10px; padding: 6px 15px; font-weight: bold;"/>
                 </div>
                 <table id="tableSend" width="100%" class="sophHeader">
                 <tbody id="appendHere">
@@ -701,7 +733,9 @@ function createList() {
         </tr>`;
     }
     $("#appendHere").eq(0).append(listHTML);
-    $("#building")[0].focus();
+    if ($(':button[id^="building"]').length > 0) {
+        $(':button[id^="building"]')[0].focus();
+    }
 
     for (let i = 0; i < shortageResources.length; i++) {
         if (parseInt(shortageResources[i][0].wood) + parseInt(shortageResources[i][1].stone) + parseInt(shortageResources[i][2].iron) != 0)
