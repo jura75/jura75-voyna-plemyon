@@ -1,6 +1,5 @@
-//script by Sophie "Shinko to Kuma". discord: Sophie#2418 website: https://www.shinko-to-kuma.com/
-//Updated with robust manual and dynamic group parsing, page=-1 fix, and Auto-Send integration
-console.log("Latest update: 20 March 2026 - Sophie 'Shinko to Kuma' / Integrated Group Parsing & Auto-Send Fix");
+// Updated: Combined WH Balancer (File 1) with Coordinate Target & Minting Res Logic / Counter (File 2)
+console.log("Latest update: Combined WH Balancer & Coordinate Minting Sender");
 var testPage;
 var is_mobile = !!navigator.userAgent.match(/iphone|android|blackberry/ig) || false;
 var warehouseCapacity = [];
@@ -26,6 +25,19 @@ var cleanLinks = [];
 var stillShortage = [];
 var stillExcess = [];
 
+// Счетчики отправленных ресурсов и данные цели (из Файла 2)
+var totalWoodSent = 0; 
+var totalStoneSent = 0; 
+var totalIronSent = 0;
+var sendBack = null;
+
+// Процентные соотношения для чеканки/отправок (Файл 2)
+if (typeof woodPercentage == 'undefined') {
+    var woodPercentage = 28000 / 83000;
+    var stonePercentage = 30000 / 83000;
+    var ironPercentage = 25000 / 83000;
+}
+
 function init() {
     warehouseCapacity = [];
     allWoodTotals = [];
@@ -47,6 +59,7 @@ function init() {
     cleanLinks = [];
     stillShortage = [];
     stillExcess = [];
+    sendBack = null;
 }
 
 function cleanup() {
@@ -66,8 +79,21 @@ function cleanup() {
     cleanLinks = [];
 }
 
+// Функция сброса групп в состояние "Все группы" и перезагрузки интерфейса
+function resetGroupsAndReload() {
+    settings.donorGroup = "all";
+    settings.targetGroup = "all";
+    localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
+    $(".flex-container").remove();
+    $("div[id*='restart']").remove();
+    $("div[id*='sendResources']").remove();
+    $("div[id*='resourceSender']").remove();
+    init();
+    displayEverything();
+}
+
 // Перевод интерфейса на русский язык
-var langShinko = [
+var langInterface = [
     "Балансировщик склада",
     "Деревня-источник",
     "Целевая деревня",
@@ -76,7 +102,7 @@ var langShinko = [
     "Глина",
     "Железо",
     "Отправить ресурсы",
-    "Создано Sophie 'Shinko to Kuma'",
+    "Создано",
     "Всего дерева",
     "Всего глины",
     "Всего железа",
@@ -84,7 +110,10 @@ var langShinko = [
     "Глины на деревню",
     "Железа на деревню",
     "Премиум-биржа",
-    "Система"
+    "Система",
+    "Отправка по координатам",
+    "Координаты цели",
+    "Оставить складов (%)"
 ];
 
 // colors for UI
@@ -124,6 +153,9 @@ if (localStorage.getItem("settingsWHBalancerSophie") != null) {
     settings.needsMorePercentage = parseFloat(tempArray.needsMorePercentage);
     settings.donorGroup = tempArray.donorGroup !== undefined ? tempArray.donorGroup : "all";
     settings.targetGroup = tempArray.targetGroup !== undefined ? tempArray.targetGroup : "all";
+    settings.sendToCoord = tempArray.sendToCoord !== undefined ? tempArray.sendToCoord : false;
+    settings.targetCoordinate = tempArray.targetCoordinate !== undefined ? tempArray.targetCoordinate : "";
+    settings.resLimit = tempArray.resLimit !== undefined ? parseInt(tempArray.resLimit) : 0;
 } else {
     if (typeof settings == 'undefined') {
         var settings = {
@@ -134,7 +166,10 @@ if (localStorage.getItem("settingsWHBalancerSophie") != null) {
             "builtOutPercentage": 0.25,
             "needsMorePercentage": 0.85,
             "donorGroup": "all",
-            "targetGroup": "all"
+            "targetGroup": "all",
+            "sendToCoord": false,
+            "targetCoordinate": "",
+            "resLimit": 0
         };
     }
     localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
@@ -148,11 +183,17 @@ if (!settings.builtOutPercentage) settings.builtOutPercentage = 0.20;
 if (!settings.needsMorePercentage) settings.needsMorePercentage = 0.85;
 if (!settings.donorGroup) settings.donorGroup = "all";
 if (!settings.targetGroup) settings.targetGroup = "all";
+if (settings.sendToCoord === undefined) settings.sendToCoord = false;
+if (!settings.targetCoordinate) settings.targetCoordinate = "";
+if (settings.resLimit === undefined) settings.resLimit = 0;
 
 if ($("#sendResources")[0]) {
     $("#sendResources")[0].remove();
     $("#tableSend")[0].remove();
     $("#totals")[0].remove();
+}
+if ($("#resourceSender")[0]) {
+    $("#resourceSender")[0].remove();
 }
 
 if (game_data.player.sitter > 0) {
@@ -163,6 +204,7 @@ if (game_data.player.sitter > 0) {
     URLProd = `game.php?&screen=overview_villages&mode=prod&page=-1&`;
 }
 
+// Функция отправки ресурса с обновлением счетчиков (интеграция из Файла 2)
 function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, rowNr) {
     $("#" + rowNr)[0].remove();
     var e = { "target_id": targetID, "wood": woodAmount, "stone": stoneAmount, "iron": ironAmount };
@@ -171,6 +213,17 @@ function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, r
         }, e, function (e) {
             UI.SuccessMessage(e.message);
             console.log(e.message);
+            
+            // Обновляем счетчики отправленных ресурсов (Файл 2)
+            totalWoodSent += woodAmount;
+            totalStoneSent += stoneAmount;
+            totalIronSent += ironAmount;
+            if ($("#woodSent").length > 0) {
+                $("#woodSent").text(numberWithCommas(totalWoodSent));
+                $("#stoneSent").text(numberWithCommas(totalStoneSent));
+                $("#ironSent").text(numberWithCommas(totalIronSent));
+            }
+
             if ($(':button[id^="building"]').length > 0) {
                 $(':button[id^="building"]')[0].focus();
             }
@@ -183,6 +236,7 @@ function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, r
         if ($("#tableSend tr").length <= 2) {
             alert("Отправка завершена!");
             if ($(".btn-pp").length > 0) { $(".btn-pp").remove(); }
+            resetGroupsAndReload();
             throw Error("Done.");
         }
         if ($(':button[id^="building"]').length > 0) {
@@ -203,6 +257,7 @@ function autoSendResources() {
     function sendNext() {
         if (index >= buttons.length) {
             UI.SuccessMessage("Все ресурсы успешно отправлены!");
+            resetGroupsAndReload();
             return;
         }
         let btn = buttons[index];
@@ -218,6 +273,56 @@ function autoSendResources() {
     sendNext();
 }
 
+// Функция расчета ресурсов с учетом процента остатка склада и мерчантов (из Файла 2)
+function calculateResAmounts(wood, stone, iron, warehouse, merchants) {
+    var merchantCarry = merchants * 1000;
+    var leaveBehindRes = Math.floor(warehouse / 100 * settings.resLimit);
+    var localWood = wood - leaveBehindRes;
+    var localStone = stone - leaveBehindRes;
+    var localIron = iron - leaveBehindRes;
+    localWood = Math.max(0, localWood);
+    localStone = Math.max(0, localStone);
+    localIron = Math.max(0, localIron);
+
+    var merchantWood = (merchantCarry * woodPercentage);
+    var merchantStone = (merchantCarry * stonePercentage);
+    var merchantIron = (merchantCarry * ironPercentage);
+
+    var perc = 1;
+    if (merchantWood > localWood) {
+        perc = localWood / merchantWood;
+        merchantWood = merchantWood * perc;
+        merchantStone = merchantStone * perc;
+        merchantIron = merchantIron * perc;
+    }
+    if (merchantStone > localStone) {
+        perc = localStone / merchantStone;
+        merchantWood = merchantWood * perc;
+        merchantStone = merchantStone * perc;
+        merchantIron = merchantIron * perc;
+    }
+    if (merchantIron > localIron) {
+        perc = localIron / merchantIron;
+        merchantWood = merchantWood * perc;
+        merchantStone = merchantStone * perc;
+        merchantIron = merchantIron * perc;
+    }
+    return { "wood": Math.floor(merchantWood), "stone": Math.floor(merchantStone), "iron": Math.floor(merchantIron) };
+}
+
+// Получение ID и данных целевой деревни по координатам через API (Файл 2)
+function fetchTargetAndDisplay(coordinate, callback) {
+    var sitterID = game_data.player.sitter > 0 ? 
+        `game.php?t=${game_data.player.id}&screen=api&ajax=target_selection&input=${coordinate}&type=coord` : 
+        `/game.php?&screen=api&ajax=target_selection&input=${coordinate}&type=coord`;
+    $.get(sitterID, function (json) {
+        if (json && json.villages && json.villages.length > 0) {
+            sendBack = [json.villages[0].id, json.villages[0].name, json.villages[0].image, json.villages[0].player_name, json.villages[0].points, json.villages[0].x, json.villages[0].y];
+        }
+        callback();
+    });
+}
+
 function displayEverything() {
     $.get(URLIncRes, function () {
         console.log("Grabbed transport page");
@@ -229,7 +334,7 @@ function displayEverything() {
             if ($("#mobileHeader")[0]) {
                 let $resourceGroups = $page.find("#trades_table tr")[i].children[5].children[1].children;
                 for (let j = 0; j < Object.keys($resourceGroups).length; j++) {
-                    if ($page.find("#trades_table tr")[1].children[2].innerText != langShinko[16]) {
+                    if ($page.find("#trades_table tr")[1].children[2].innerText != langInterface[16]) {
                         let $child = $($resourceGroups[j]);
                         let classNames = $child.find('.icon.mheader').attr('class').split(' ');
                         let resourceType = classNames[classNames.length - 1];
@@ -248,7 +353,7 @@ function displayEverything() {
                     } else {
                         classNames = $child.attr('class').split(' ');
                     }
-                    if ($page.find("#trades_table tr")[1].children[3].innerText != langShinko[15]) {
+                    if ($page.find("#trades_table tr")[1].children[3].innerText != langInterface[15]) {
                         let resourceType = classNames[classNames.length - 1];
                         let resourceAmount = $child.text().replace(/[^\d]/g, '');
                         villageData[resourceType] = resourceAmount;
@@ -256,7 +361,7 @@ function displayEverything() {
                     }
                 }
             }
-            if ($page.find("#trades_table tr")[1].children[3].innerText != langShinko[15] && $page.find("#trades_table tr")[1].children[2].innerText != langShinko[16]) {
+            if ($page.find("#trades_table tr")[1].children[3].innerText != langInterface[15] && $page.find("#trades_table tr")[1].children[2].innerText != langInterface[16]) {
                 if (incomingRes[villageIDtemp] == undefined) {
                     incomingRes[villageIDtemp] = { "wood": 0, "stone": 0, "iron": 0 };
                 }
@@ -271,7 +376,7 @@ function displayEverything() {
         }).done(function (page) {
             testPage = page;
             
-            // --- УЛУЧШЕННЫЙ ПАРСИНГ ГРУПП ---
+            // Парсинг доступных групп (Файл 1)
             var availableGroups = [];
             var availableGroupsMap = {};
             function extractGroups($container) {
@@ -369,318 +474,405 @@ function displayEverything() {
 
             villagesData.sort((a, b) => (parseInt(a.points) < parseInt(b.points)) ? 1 : -1);
 
-            totalWood = 0; totalStone = 0; totalIron = 0;
-            for (let i in allWoodTotals) { totalWood += parseInt(allWoodTotals[i]); }
-            for (let i in allClayTotals) { totalStone += parseInt(allClayTotals[i]); }
-            for (let i in allIronTotals) { totalIron += parseInt(allIronTotals[i]); }
-            for (let o = 0; o < Object.keys(incomingRes).length; o++) {
-                totalWood += incomingRes[Object.keys(incomingRes)[o]].wood;
-                totalStone += incomingRes[Object.keys(incomingRes)[o]].stone;
-                totalIron += incomingRes[Object.keys(incomingRes)[o]].iron;
-            }
-            woodAverage = Math.floor(totalWood / warehouseCapacity.length);
-            stoneAverage = Math.floor(totalStone / warehouseCapacity.length);
-            ironAverage = Math.floor(totalIron / warehouseCapacity.length);
-
-            if (settings.isMinting == false) {
-                actualWoodAverage = woodAverage;
-                actualStoneAverage = stoneAverage;
-                actualIronAverage = ironAverage;
-                actualTotalWood = totalWood;
-                actualTotalStone = totalStone;
-                actualTotalIron = totalIron;
-                actualWHCountNeedsBalancingWood = warehouseCapacity.length;
-                actualWHCountNeedsBalancingStone = warehouseCapacity.length;
-                actualWHCountNeedsBalancingIron = warehouseCapacity.length;
-                for (let i = 0; i < warehouseCapacity.length; i++) {
-                    actualWoodAverage = Math.floor(actualTotalWood / actualWHCountNeedsBalancingWood);
-                    actualStoneAverage = Math.floor(actualTotalStone / actualWHCountNeedsBalancingStone);
-                    actualIronAverage = Math.floor(actualTotalIron / actualWHCountNeedsBalancingIron);
-                    if (warehouseCapacity[i] < actualWoodAverage) {
-                        actualTotalWood -= actualWoodAverage - warehouseCapacity[i] * settings.needsMorePercentage;
-                        actualWHCountNeedsBalancingWood--;
-                    }
-                    if (warehouseCapacity[i] < actualStoneAverage) {
-                        actualTotalStone -= actualStoneAverage - warehouseCapacity[i] * settings.needsMorePercentage;
-                        actualWHCountNeedsBalancingStone--;
-                    }
-                    if (warehouseCapacity[i] < actualIronAverage) {
-                        actualTotalIron -= actualIronAverage - warehouseCapacity[i] * settings.needsMorePercentage;
-                        actualWHCountNeedsBalancingIron--;
-                    }
+            // Функция продолжения построения списка после возможной подгрузки координат
+            var proceedBuilding = function() {
+                totalWood = 0; totalStone = 0; totalIron = 0;
+                for (let i in allWoodTotals) { totalWood += parseInt(allWoodTotals[i]); }
+                for (let i in allClayTotals) { totalStone += parseInt(allClayTotals[i]); }
+                for (let i in allIronTotals) { totalIron += parseInt(allIronTotals[i]); }
+                for (let o = 0; o < Object.keys(incomingRes).length; o++) {
+                    totalWood += incomingRes[Object.keys(incomingRes)[o]].wood;
+                    totalStone += incomingRes[Object.keys(incomingRes)[o]].stone;
+                    totalIron += incomingRes[Object.keys(incomingRes)[o]].iron;
                 }
-            } else {
-                actualWoodAverage = woodAverage;
-                actualStoneAverage = stoneAverage;
-                actualIronAverage = ironAverage;
-            }
+                woodAverage = Math.floor(totalWood / warehouseCapacity.length);
+                stoneAverage = Math.floor(totalStone / warehouseCapacity.length);
+                ironAverage = Math.floor(totalIron / warehouseCapacity.length);
 
-            totalsAndAverages = `<div id='totals' class='sophHeader' border=0>
-                <table id='totalsAndAverages' width='100%'>
-                <tr class='sophRowA'>
-                <td>${langShinko[9]}: ${numberWithCommas(totalWood)}</td>
-                <td>${langShinko[10]}: ${numberWithCommas(totalStone)}</td>
-                <td>${langShinko[11]}: ${numberWithCommas(totalIron)}</td>
-                </tr>
-                <tr class='sophRowB'>
-                <td>${langShinko[12]}: ${numberWithCommas(woodAverage)}</td>
-                <td>${langShinko[13]}: ${numberWithCommas(stoneAverage)}</td>
-                <td>${langShinko[14]}: ${numberWithCommas(ironAverage)}</td>
-                </tr>
+                // Если включена отправка строго по координатам (Файл 2)
+                if (settings.sendToCoord && sendBack && sendBack[0]) {
+                    var donorVillageIds = null;
+                    if (settings.donorGroup !== "all") {
+                        var dUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.donorGroup;
+                        $.ajax({
+                            url: dUrl,
+                            async: false,
+                            success: function(data) {
+                                donorVillageIds = [];
+                                $(data).find(".quickedit-vn").each(function() {
+                                    donorVillageIds.push($(this).data("id").toString());
+                                });
+                            }
+                        });
+                    }
+
+                    for (let p = 0; p < villagesData.length; p++) {
+                        if (donorVillageIds !== null && !donorVillageIds.includes(villagesData[p].id)) continue;
+                        if (villagesData[p].id == sendBack[0]) continue; // Не шлем в саму себя
+
+                        var res = calculateResAmounts(
+                            parseInt(villagesData[p].wood), 
+                            parseInt(villagesData[p].stone), 
+                            parseInt(villagesData[p].iron), 
+                            parseInt(villagesData[p].warehouseCapacity), 
+                            parseInt(villagesData[p].availableMerchants)
+                        );
+
+                        if (res.wood + res.stone + res.iron > 0) {
+                            var vCoord = villagesData[p].name.match(/(\d+)\|(\d+)/);
+                            var dist = vCoord ? checkDistance(vCoord[1], vCoord[2], sendBack[5], sendBack[6]) : 0;
+                            links.push({
+                                "source": villagesData[p].id,
+                                "target": sendBack[0],
+                                "wood": res.wood,
+                                "stone": res.stone,
+                                "iron": res.iron,
+                                "distance": dist
+                            });
+                        }
+                    }
+                } else {
+                    // Стандартная логика балансировщика Файла 1
+                    if (settings.isMinting == false) {
+                        actualWoodAverage = woodAverage;
+                        actualStoneAverage = stoneAverage;
+                        actualIronAverage = ironAverage;
+                        actualTotalWood = totalWood;
+                        actualTotalStone = totalStone;
+                        actualTotalIron = totalIron;
+                        actualWHCountNeedsBalancingWood = warehouseCapacity.length;
+                        actualWHCountNeedsBalancingStone = warehouseCapacity.length;
+                        actualWHCountNeedsBalancingIron = warehouseCapacity.length;
+                        for (let i = 0; i < warehouseCapacity.length; i++) {
+                            actualWoodAverage = Math.floor(actualTotalWood / actualWHCountNeedsBalancingWood);
+                            actualStoneAverage = Math.floor(actualTotalStone / actualWHCountNeedsBalancingStone);
+                            actualIronAverage = Math.floor(actualTotalIron / actualWHCountNeedsBalancingIron);
+                            if (warehouseCapacity[i] < actualWoodAverage) {
+                                actualTotalWood -= actualWoodAverage - warehouseCapacity[i] * settings.needsMorePercentage;
+                                actualWHCountNeedsBalancingWood--;
+                            }
+                            if (warehouseCapacity[i] < actualStoneAverage) {
+                                actualTotalStone -= actualStoneAverage - warehouseCapacity[i] * settings.needsMorePercentage;
+                                actualWHCountNeedsBalancingStone--;
+                            }
+                            if (warehouseCapacity[i] < actualIronAverage) {
+                                actualTotalIron -= actualIronAverage - warehouseCapacity[i] * settings.needsMorePercentage;
+                                actualWHCountNeedsBalancingIron--;
+                            }
+                        }
+                    } else {
+                        actualWoodAverage = woodAverage;
+                        actualStoneAverage = stoneAverage;
+                        actualIronAverage = ironAverage;
+                    }
+
+                    totalsAndAverages = `<div id='totals' class='sophHeader' border=0>
+                        <table id='totalsAndAverages' width='100%'>
+                        <tr class='sophRowA'>
+                        <td>${langInterface[9]}: ${numberWithCommas(totalWood)}</td>
+                        <td>${langInterface[10]}: ${numberWithCommas(totalStone)}</td>
+                        <td>${langInterface[11]}: ${numberWithCommas(totalIron)}</td>
+                        </tr>
+                        <tr class='sophRowB'>
+                        <td>${langInterface[12]}: ${numberWithCommas(woodAverage)}</td>
+                        <td>${langInterface[13]}: ${numberWithCommas(stoneAverage)}</td>
+                        <td>${langInterface[14]}: ${numberWithCommas(ironAverage)}</td>
+                        </tr>
+                        </table>`;
+
+                    $(".content-border").eq(0).prepend(`<div id="progressbar" style="width: 100%; background-color: #36393f;"><div id="progress" style="width: 0%; height: 35px; background-color: #4CAF50; text-align: center; line-height: 32px; color: black;"></div></div>`);
+                    $("#mobileHeader").eq(0).prepend(`<div id="progressbar" style="width: 100%; background-color: #36393f;"><div id="progress" style="width: 0%; height: 35px; background-color: #4CAF50; text-align: center; line-height: 32px; color: black;"></div></div>`);
+
+                    for (let v = 0; v < villagesData.length; v++) {
+                        excessResources[v] = [];
+                        shortageResources[v] = [];
+                        villageID.push(villagesData[v].id);
+                        incomingWood = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].wood : 0;
+                        incomingStone = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].stone : 0;
+                        incomingIron = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].iron : 0;
+
+                        tempWood = (actualWoodAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
+                            parseInt(villagesData[v].wood) + incomingWood - actualWoodAverage : 
+                            -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingWood - parseInt(villagesData[v].wood));
+
+                        tempStone = (actualStoneAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
+                            parseInt(villagesData[v].stone) + incomingStone - actualStoneAverage : 
+                            -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingStone - parseInt(villagesData[v].stone));
+
+                        tempIron = (actualIronAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
+                            parseInt(villagesData[v].iron) + incomingIron - actualIronAverage : 
+                            -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingIron - parseInt(villagesData[v].iron));
+
+                        if (villagesData[v].farmSpaceUsed > settings.highFarm || villagesData[v].points > settings.highPoints) {
+                            if (parseInt(villagesData[v].wood) + incomingWood > settings.builtOutPercentage * villagesData[v].warehouseCapacity)
+                                tempWood = Math.round((parseInt(villagesData[v].wood) + incomingWood) - (settings.builtOutPercentage * villagesData[v].warehouseCapacity));
+                            if (parseInt(villagesData[v].stone) + incomingStone > settings.builtOutPercentage * villagesData[v].warehouseCapacity)
+                                tempStone = Math.round((parseInt(villagesData[v].stone) + incomingStone) - (settings.builtOutPercentage * villagesData[v].warehouseCapacity));
+                            if (parseInt(villagesData[v].iron) + incomingIron > settings.builtOutPercentage * villagesData[v].warehouseCapacity)
+                                tempIron = Math.round((parseInt(villagesData[v].iron) + incomingIron) - (settings.builtOutPercentage * villagesData[v].warehouseCapacity));
+                        }
+
+                        if (villagesData[v].points < settings.lowPoints) {
+                            tempWood = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].wood) - incomingWood);
+                            tempStone = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].stone) - incomingStone);
+                            tempIron = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].iron) - incomingIron);
+                        }
+
+                        if (tempWood > 0) { excessResources[v].push({ "wood": Math.floor(tempWood / 1000) * 1000 }); shortageResources[v].push({ "wood": 0 }); }
+                        else { shortageResources[v].push({ "wood": Math.floor(-tempWood / 1000) * 1000 }); excessResources[v].push({ "wood": 0 }); }
+
+                        if (tempStone > 0) { excessResources[v].push({ "stone": Math.floor(tempStone / 1000) * 1000 }); shortageResources[v].push({ "stone": 0 }); }
+                        else { shortageResources[v].push({ "stone": Math.floor(-tempStone / 1000) * 1000 }); excessResources[v].push({ "stone": 0 }); }
+
+                        if (tempIron > 0) { excessResources[v].push({ "iron": Math.floor(tempIron / 1000) * 1000 }); shortageResources[v].push({ "iron": 0 }); }
+                        else { shortageResources[v].push({ "iron": Math.floor(-tempIron / 1000) * 1000 }); excessResources[v].push({ "iron": 0 }); }
+                    }
+
+                    var donorVillageIds = null;
+                    var targetVillageIds = null;
+
+                    if (settings.donorGroup !== "all" || settings.targetGroup !== "all") {
+                        if (settings.donorGroup !== "all") {
+                            var dUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.donorGroup;
+                            $.ajax({
+                                url: dUrl,
+                                async: false,
+                                success: function(data) {
+                                    donorVillageIds = [];
+                                    $(data).find(".quickedit-vn").each(function() {
+                                        donorVillageIds.push($(this).data("id").toString());
+                                    });
+                                }
+                            });
+                        }
+                        
+                        if (settings.targetGroup !== "all") {
+                            var tUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.targetGroup;
+                            $.ajax({
+                                url: tUrl,
+                                async: false,
+                                success: function(data) {
+                                    targetVillageIds = [];
+                                    $(data).find(".quickedit-vn").each(function() {
+                                        targetVillageIds.push($(this).data("id").toString());
+                                    });
+                                }
+                            });
+                        }
+                    }
+
+                    for (let p = 0; p < excessResources.length; p++) {
+                        if (donorVillageIds !== null && !donorVillageIds.includes(villagesData[p].id)) continue;
+                        
+                        tempAllExcessCombined = parseInt(Math.floor(excessResources[p][0].wood / 1000) * 1000) + parseInt(Math.floor(excessResources[p][1].stone / 1000) * 1000) + parseInt(Math.floor(excessResources[p][2].iron / 1000) * 1000);
+
+                        if (tempAllExcessCombined > 0) {
+                            tempMaxMerchantsNeeded = Math.floor(tempAllExcessCombined / 1000);
+                            if (tempMaxMerchantsNeeded < villagesData[p].availableMerchants) {
+                                merchantOrders.push({ "villageID": villagesData[p].id, "x": villagesData[p].name.match(/(\d+)\|(\d+)/)[1], "y": villagesData[p].name.match(/(\d+)\|(\d+)/)[2], "wood": Math.floor(excessResources[p][0].wood / 1000), "stone": Math.floor(excessResources[p][1].stone / 1000), "iron": Math.floor(excessResources[p][2].iron / 1000) });
+                            } else {
+                                tempPercWood = excessResources[p][0].wood / tempAllExcessCombined;
+                                tempPercStone = excessResources[p][1].stone / tempAllExcessCombined;
+                                tempPercIron = excessResources[p][2].iron / tempAllExcessCombined;
+                                merchantOrders.push({ "villageID": villagesData[p].id, "x": villagesData[p].name.match(/(\d+)\|(\d+)/)[1], "y": villagesData[p].name.match(/(\d+)\|(\d+)/)[2], "wood": Math.floor(tempPercWood * villagesData[p].availableMerchants), "stone": Math.floor(tempPercStone * villagesData[p].availableMerchants), "iron": Math.floor(tempPercIron * villagesData[p].availableMerchants) });
+                            }
+                        }
+                    }
+
+                    for (let q = shortageResources.length - 1; q >= 0; q--) {
+                        $("#progress").css("width", `${(shortageResources.length - q) / shortageResources.length * 100}%`);
+                        if (targetVillageIds !== null && !targetVillageIds.includes(villagesData[q].id)) continue;
+
+                        for (let d = 0; d < merchantOrders.length; d++) {
+                            merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
+                        }
+                        merchantOrders.sort((l, r) => l.distance - r.distance);
+
+                        if (shortageResources[q][0].wood > 0) {
+                            while (shortageResources[q][0].wood > 0) {
+                                var totalWoodToTrade = 0;
+                                for (let m = 0; m < merchantOrders.length; m++) {
+                                    totalWoodToTrade += merchantOrders[m].wood;
+                                    if (merchantOrders[m].wood > 0) {
+                                        if (shortageResources[q][0].wood <= merchantOrders[m].wood * 1000) {
+                                            links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "wood": shortageResources[q][0].wood });
+                                            merchantOrders[m].wood -= shortageResources[q][0].wood / 1000;
+                                            shortageResources[q][0].wood = 0;
+                                        } else {
+                                            links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "wood": merchantOrders[m].wood * 1000 });
+                                            shortageResources[q][0].wood -= merchantOrders[m].wood * 1000;
+                                            merchantOrders[m].wood = 0;
+                                        }
+                                    }
+                                    if (shortageResources[q][0].wood <= 0) break;
+                                    if (m == merchantOrders.length - 1 && shortageResources[q][0].wood > 0) { totalWoodToTrade = 0; break; }
+                                }
+                                if (totalWoodToTrade == 0) { q = 0; break; }
+                            }
+                        }
+                    }
+
+                    for (let q = shortageResources.length - 1; q >= 0; q--) {
+                        if (targetVillageIds !== null && !targetVillageIds.includes(villagesData[q].id)) continue;
+                        for (var d = 0; d < merchantOrders.length; d++) {
+                            merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
+                        }
+                        merchantOrders.sort((l, r) => l.distance - r.distance);
+                        if (shortageResources[q][1].stone > 0) {
+                            while (shortageResources[q][1].stone > 0) {
+                                var totalstoneToTrade = 0;
+                                for (var m = 0; m < merchantOrders.length; m++) {
+                                    totalstoneToTrade += merchantOrders[m].stone;
+                                    if (merchantOrders[m].stone > 0) {
+                                        if (shortageResources[q][1].stone <= merchantOrders[m].stone * 1000) {
+                                            links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "stone": shortageResources[q][1].stone });
+                                            merchantOrders[m].stone -= shortageResources[q][1].stone / 1000;
+                                            shortageResources[q][1].stone = 0;
+                                        } else {
+                                            links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "stone": merchantOrders[m].stone * 1000 });
+                                            shortageResources[q][1].stone -= merchantOrders[m].stone * 1000;
+                                            merchantOrders[m].stone = 0;
+                                        }
+                                    }
+                                    if (shortageResources[q][1].stone <= 0) break;
+                                    if (m == merchantOrders.length - 1 && shortageResources[q][1].stone > 0) { totalstoneToTrade = 0; break; }
+                                }
+                                if (totalstoneToTrade == 0) { q = 0; break; }
+                            }
+                        }
+                    }
+
+                    for (let q = shortageResources.length - 1; q >= 0; q--) {
+                        if (targetVillageIds !== null && !targetVillageIds.includes(villagesData[q].id)) continue;
+                        for (let d = 0; d < merchantOrders.length; d++) {
+                            merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
+                        }
+                        merchantOrders.sort((l, r) => l.distance - r.distance);
+                        if (shortageResources[q][2].iron > 0) {
+                            while (shortageResources[q][2].iron > 0) {
+                                var totalironToTrade = 0;
+                                for (let m = 0; m < merchantOrders.length; m++) {
+                                    totalironToTrade += merchantOrders[m].iron;
+                                    if (merchantOrders[m].iron > 0) {
+                                        if (shortageResources[q][2].iron <= merchantOrders[m].iron * 1000) {
+                                            links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "iron": shortageResources[q][2].iron });
+                                            merchantOrders[m].iron -= shortageResources[q][2].iron / 1000;
+                                            shortageResources[q][2].iron = 0;
+                                        } else {
+                                            links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "iron": merchantOrders[m].iron * 1000 });
+                                            shortageResources[q][2].iron -= merchantOrders[m].iron * 1000;
+                                            merchantOrders[m].iron = 0;
+                                        }
+                                    }
+                                    if (shortageResources[q][2].iron <= 0) break;
+                                    if (m == merchantOrders.length - 1 && shortageResources[q][2].iron > 0) { totalironToTrade = 0; break; }
+                                }
+                                if (totalironToTrade == 0) { q = 0; break; }
+                            }
+                        }
+                    }
+                    $("#progress").remove();
+                }
+
+                var groupOptionsHTML = `<option value="all">Все группы</option>`;
+                for (let g = 0; g < availableGroups.length; g++) {
+                    groupOptionsHTML += `<option value="${availableGroups[g].id}">${availableGroups[g].name}</option>`;
+                }
+
+                // Блок счетчика отправленных ресурсов (Файл 2), отображается при включенных координатах или по желанию
+                var playerTargetHTML = "";
+                if (settings.sendToCoord && sendBack) {
+                    playerTargetHTML = `<table id="playerTarget" width="100%" class="sophHeader" style="margin-bottom: 5px;">
+                        <tbody>
+                            <tr>
+                                <td class="sophHeader" rowspan="3" style="width: 60px; text-align: center;"><img src="${sendBack[2]}"></td>
+                                <td class="sophHeader" width="15%">Игрок:</td>
+                                <td class="sophRowA" width="30%">${sendBack[3]} (${sendBack[1]})</td>
+                                <td class="sophHeader" width="10%" style="text-align:center;"><span class="icon header wood"> </span></td>
+                                <td class="sophRowB" width="35%" id="woodSent">${numberWithCommas(totalWoodSent)}</td>
+                            </tr>
+                            <tr>
+                                <td class="sophHeader">Деревня:</td>
+                                <td class="sophRowB">${sendBack[1]}</td>
+                                <td class="sophHeader" style="text-align:center;"><span class="icon header stone"> </span></td>
+                                <td class="sophRowA" id="stoneSent">${numberWithCommas(totalStoneSent)}</td>
+                            </tr>
+                            <tr>
+                                <td class="sophHeader">Очки:</td>
+                                <td class="sophRowA">${sendBack[4]}</td>
+                                <td class="sophHeader" style="text-align:center;"><span class="icon header iron"> </span></td>
+                                <td class="sophRowB" id="ironSent">${numberWithCommas(totalIronSent)}</td>
+                            </tr>
+                        </tbody>
+                    </table>`;
+                }
+
+                htmlCode = `<div id="restart">${totalsAndAverages}</div>
+                    <div id="sendResources" class="flex-container sophHeader" style="position: relative">
+                        <button class="sophRowA collapsible" style="width: 250px;min-width: 230px;">Открыть меню настроек</button>
+                        <div class="content submenu" style="width: 520px;height:620px;z-index:99999">
+                            <form id="settings">
+                                <table style="border-spacing: 2px;">
+                                <tr><td style="padding: 6px;"><label for="isMinting">Игнорировать настройки</label></td><td style="padding: 6px;"><input type="checkbox" name="isMinting"></td></tr>
+                                <tr><td style="padding: 6px;"><label for="sendToCoord">${langInterface[17]}</label></td><td style="padding: 6px;"><input type="checkbox" name="sendToCoord" id="sendToCoordCheck"></td></tr>
+                                <tr><td style="padding: 6px;"><label for="targetCoordinate">${langInterface[18]}:</label></td><td style="padding: 6px;"><input type="text" name="targetCoordinate" id="targetCoordinateInput" size="12" value="${settings.targetCoordinate}" style="color:black;"></td></tr>
+                                <tr><td style="padding: 6px;"><label for="resLimit">${langInterface[19]}:</label></td><td style="padding: 6px;"><input type="text" name="resLimit" id="resLimitInput" size="4" value="${settings.resLimit}" style="color:black;">%</td></tr>
+                                <tr><td style="padding: 6px;"><label for="donorGroup">Донор (откуда):</label></td><td style="padding: 6px;"><select name="donorGroup" id="donorGroupSelect" style="width:160px; color:black;">${groupOptionsHTML}</select></td></tr>
+                                <tr><td style="padding: 6px;"><label for="targetGroup">Получатель (куда):</label></td><td style="padding: 6px;"><select name="targetGroup" id="targetGroupSelect" style="width:160px; color:black;">${groupOptionsHTML}</select></td></tr>
+                                <tr><td style="padding: 6px;"><label for="lowPoints">Приоритет</label></td><td style="padding: 6px;"><input type="range" min="0" max="13000" step="10" value="${settings.lowPoints}" class="slider" name="lowPoints" oninput="sliderChange('lowPoints',this.value)">< <output id="lowPoints"></output> очков</td></tr>
+                                <tr><td style="padding: 6px;"><label for="highPoints">Готовые деревни</label></td><td style="padding: 6px;"><input type="range" min="0" max="13000" step="10" value="${settings.highPoints}" class="slider" name="highPoints" oninput="sliderChange('highPoints',this.value)">> <output id="highPoints"></output> очков</td></tr>
+                                <tr><td style="padding: 6px;"><label for="highFarm">Высокая ферма</label></td><td style="padding: 6px;"><input type="range" min="0" max="33000" step="10" value="${settings.highFarm}" class="slider" name="highFarm" oninput="sliderChange('highFarm',this.value)"><output id="highFarm"></output> нас.</td></tr>
+                                <tr><td style="padding: 6px;"><label for="builtOutPercentage">Вместимость склада (горизонт. деревни): </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.builtOutPercentage}" class="slider" name="builtOutPercentage" oninput="sliderChange('builtOutPercentage',this.value)"><output id="builtOutPercentage"></output></td></tr>
+                                <tr><td style="padding: 6px;"><label for="needsMorePercentage">Вместимость склада (приорит. деревни): </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.needsMorePercentage}" class="slider" name="needsMorePercentage" oninput="sliderChange('needsMorePercentage',this.value)"><output id="needsMorePercentage"></output></td></tr>
+                                <tr><td style="padding: 6px;"><input type="button" class="btn evt-confirm-btn btn-confirm-yes" value="Сохранить" onclick="saveSettings();"/></td></tr>
+                                <tr><td colspan="2" style="padding: 6px; text-align: center;"><input type="button" class="btn btnSophie btn-confirm-yes" value="Автоотправка" onclick="autoSendResources();" style="width: 100%; padding: 6px;"/></td></tr>
+                                </table>
+                            </form>
+                        </div>
+                        <input type="button" class="btn btnSophie btn-confirm-yes" value="Автоотправка" onclick="autoSendResources();" style="margin-right: 10px; padding: 6px 15px; font-weight: bold;"/>
+                    </div>
+                    ${playerTargetHTML}
+                    <table id="tableSend" width="100%" class="sophHeader">
+                    <tbody id="appendHere">
+                        <tr><td class="sophHeader" colspan=7 width="550" style="text-align:center">${langInterface[0]}</td></tr>
+                        <tr>
+                            <td class="sophHeader" width="25%" style="text-align:center">${langInterface[1]}</td>
+                            <td class="sophHeader" width="25%" style="text-align:center">${langInterface[2]}</td>
+                            <td class="sophHeader" width="5%" style="text-align:center">${langInterface[3]}</td>
+                            <td class="sophHeader" width="10%" style="text-align:center">${langInterface[4]}</td>
+                            <td class="sophHeader" width="10%" style="text-align:center">${langInterface[5]}</td>
+                            <td class="sophHeader" width="10%" style="text-align:center">${langInterface[6]}</td>
+                            <td class="sophHeader" width="10%"><font size="1">${langInterface[7]}</font></td>
+                        </tr>
+                    </tbody>
                 </table>`;
 
-            $(".content-border").eq(0).prepend(`<div id="progressbar" style="width: 100%; background-color: #36393f;"><div id="progress" style="width: 0%; height: 35px; background-color: #4CAF50; text-align: center; line-height: 32px; color: black;"></div></div>`);
-            $("#mobileHeader").eq(0).prepend(`<div id="progressbar" style="width: 100%; background-color: #36393f;"><div id="progress" style="width: 0%; height: 35px; background-color: #4CAF50; text-align: center; line-height: 32px; color: black;"></div></div>`);
+                $("#content_value").eq(0).prepend(htmlCode);
+                if (is_mobile == true) { $("#mobile_header").eq(0).prepend(htmlCode); }
 
-            for (let v = 0; v < villagesData.length; v++) {
-                excessResources[v] = [];
-                shortageResources[v] = [];
-                villageID.push(villagesData[v].id);
-                incomingWood = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].wood : 0;
-                incomingStone = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].stone : 0;
-                incomingIron = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].iron : 0;
+                $("input[name='isMinting']").attr("checked", settings.isMinting);
+                $("input[name='sendToCoord']").attr("checked", settings.sendToCoord);
+                $("#targetCoordinateInput").val(settings.targetCoordinate);
+                $("#resLimitInput").val(settings.resLimit);
+                $("#donorGroupSelect").val(settings.donorGroup);
+                $("#targetGroupSelect").val(settings.targetGroup);
+                $("#lowPoints").val(settings.lowPoints);
+                $("#highPoints").val(settings.highPoints);
+                $("#highFarm").val(settings.highFarm);
+                $("#builtOutPercentage").val(settings.builtOutPercentage);
+                $("#needsMorePercentage").val(settings.needsMorePercentage);
+                makeThingsCollapsible();
+                createList();
+            };
 
-                tempWood = (actualWoodAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
-                    parseInt(villagesData[v].wood) + incomingWood - actualWoodAverage : 
-                    -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingWood - parseInt(villagesData[v].wood));
-
-                tempStone = (actualStoneAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
-                    parseInt(villagesData[v].stone) + incomingStone - actualStoneAverage : 
-                    -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingStone - parseInt(villagesData[v].stone));
-
-                tempIron = (actualIronAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
-                    parseInt(villagesData[v].iron) + incomingIron - actualIronAverage : 
-                    -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingIron - parseInt(villagesData[v].iron));
-
-                if (villagesData[v].farmSpaceUsed > settings.highFarm || villagesData[v].points > settings.highPoints) {
-                    if (parseInt(villagesData[v].wood) + incomingWood > settings.builtOutPercentage * villagesData[v].warehouseCapacity)
-                        tempWood = Math.round((parseInt(villagesData[v].wood) + incomingWood) - (settings.builtOutPercentage * villagesData[v].warehouseCapacity));
-                    if (parseInt(villagesData[v].stone) + incomingStone > settings.builtOutPercentage * villagesData[v].warehouseCapacity)
-                        tempStone = Math.round((parseInt(villagesData[v].stone) + incomingStone) - (settings.builtOutPercentage * villagesData[v].warehouseCapacity));
-                    if (parseInt(villagesData[v].iron) + incomingIron > settings.builtOutPercentage * villagesData[v].warehouseCapacity)
-                        tempIron = Math.round((parseInt(villagesData[v].iron) + incomingIron) - (settings.builtOutPercentage * villagesData[v].warehouseCapacity));
-                }
-
-                if (villagesData[v].points < settings.lowPoints) {
-                    tempWood = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].wood) - incomingWood);
-                    tempStone = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].stone) - incomingStone);
-                    tempIron = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].iron) - incomingIron);
-                }
-
-                if (tempWood > 0) { excessResources[v].push({ "wood": Math.floor(tempWood / 1000) * 1000 }); shortageResources[v].push({ "wood": 0 }); }
-                else { shortageResources[v].push({ "wood": Math.floor(-tempWood / 1000) * 1000 }); excessResources[v].push({ "wood": 0 }); }
-
-                if (tempStone > 0) { excessResources[v].push({ "stone": Math.floor(tempStone / 1000) * 1000 }); shortageResources[v].push({ "stone": 0 }); }
-                else { shortageResources[v].push({ "stone": Math.floor(-tempStone / 1000) * 1000 }); excessResources[v].push({ "stone": 0 }); }
-
-                if (tempIron > 0) { excessResources[v].push({ "iron": Math.floor(tempIron / 1000) * 1000 }); shortageResources[v].push({ "iron": 0 }); }
-                else { shortageResources[v].push({ "iron": Math.floor(-tempIron / 1000) * 1000 }); excessResources[v].push({ "iron": 0 }); }
+            // Если включен режим отправки строго по координатам, подгружаем цель перед построением списка
+            if (settings.sendToCoord && settings.targetCoordinate.match(/\d+\|\d+/)) {
+                fetchTargetAndDisplay(settings.targetCoordinate, function() {
+                    proceedBuilding();
+                });
+            } else {
+                proceedBuilding();
             }
-
-            // --- ЗАПРОС ID ДЕРЕВЕНЬ ДЛЯ ГРУПП С page=-1 ---
-            var donorVillageIds = null;
-            var targetVillageIds = null;
-
-            if (settings.donorGroup !== "all" || settings.targetGroup !== "all") {
-                if (settings.donorGroup !== "all") {
-                    var dUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.donorGroup;
-                    $.ajax({
-                        url: dUrl,
-                        async: false,
-                        success: function(data) {
-                            donorVillageIds = [];
-                            $(data).find(".quickedit-vn").each(function() {
-                                donorVillageIds.push($(this).data("id").toString());
-                            });
-                        }
-                    });
-                }
-                
-                if (settings.targetGroup !== "all") {
-                    var tUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.targetGroup;
-                    $.ajax({
-                        url: tUrl,
-                        async: false,
-                        success: function(data) {
-                            targetVillageIds = [];
-                            $(data).find(".quickedit-vn").each(function() {
-                                targetVillageIds.push($(this).data("id").toString());
-                            });
-                        }
-                    });
-                }
-            }
-
-            // Назначение мерчантов с учетом группы доноров
-            for (let p = 0; p < excessResources.length; p++) {
-                if (donorVillageIds !== null && !donorVillageIds.includes(villagesData[p].id)) continue;
-                
-                tempAllExcessCombined = parseInt(Math.floor(excessResources[p][0].wood / 1000) * 1000) + parseInt(Math.floor(excessResources[p][1].stone / 1000) * 1000) + parseInt(Math.floor(excessResources[p][2].iron / 1000) * 1000);
-
-                if (tempAllExcessCombined > 0) {
-                    tempMaxMerchantsNeeded = Math.floor(tempAllExcessCombined / 1000);
-                    if (tempMaxMerchantsNeeded < villagesData[p].availableMerchants) {
-                        merchantOrders.push({ "villageID": villagesData[p].id, "x": villagesData[p].name.match(/(\d+)\|(\d+)/)[1], "y": villagesData[p].name.match(/(\d+)\|(\d+)/)[2], "wood": Math.floor(excessResources[p][0].wood / 1000), "stone": Math.floor(excessResources[p][1].stone / 1000), "iron": Math.floor(excessResources[p][2].iron / 1000) });
-                    } else {
-                        tempPercWood = excessResources[p][0].wood / tempAllExcessCombined;
-                        tempPercStone = excessResources[p][1].stone / tempAllExcessCombined;
-                        tempPercIron = excessResources[p][2].iron / tempAllExcessCombined;
-                        merchantOrders.push({ "villageID": villagesData[p].id, "x": villagesData[p].name.match(/(\d+)\|(\d+)/)[1], "y": villagesData[p].name.match(/(\d+)\|(\d+)/)[2], "wood": Math.floor(tempPercWood * villagesData[p].availableMerchants), "stone": Math.floor(tempPercStone * villagesData[p].availableMerchants), "iron": Math.floor(tempPercIron * villagesData[p].availableMerchants) });
-                    }
-                }
-            }
-
-            // Распределение излишков на дефицит с учетом группы получателей (Wood)
-            for (let q = shortageResources.length - 1; q >= 0; q--) {
-                $("#progress").css("width", `${(shortageResources.length - q) / shortageResources.length * 100}%`);
-                if (targetVillageIds !== null && !targetVillageIds.includes(villagesData[q].id)) continue;
-
-                for (let d = 0; d < merchantOrders.length; d++) {
-                    merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
-                }
-                merchantOrders.sort((l, r) => l.distance - r.distance);
-
-                if (shortageResources[q][0].wood > 0) {
-                    while (shortageResources[q][0].wood > 0) {
-                        var totalWoodToTrade = 0;
-                        for (let m = 0; m < merchantOrders.length; m++) {
-                            totalWoodToTrade += merchantOrders[m].wood;
-                            if (merchantOrders[m].wood > 0) {
-                                if (shortageResources[q][0].wood <= merchantOrders[m].wood * 1000) {
-                                    links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "wood": shortageResources[q][0].wood });
-                                    merchantOrders[m].wood -= shortageResources[q][0].wood / 1000;
-                                    shortageResources[q][0].wood = 0;
-                                } else {
-                                    links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "wood": merchantOrders[m].wood * 1000 });
-                                    shortageResources[q][0].wood -= merchantOrders[m].wood * 1000;
-                                    merchantOrders[m].wood = 0;
-                                }
-                            }
-                            if (shortageResources[q][0].wood <= 0) break;
-                            if (m == merchantOrders.length - 1 && shortageResources[q][0].wood > 0) { totalWoodToTrade = 0; break; }
-                        }
-                        if (totalWoodToTrade == 0) { q = 0; break; }
-                    }
-                }
-            }
-
-            // Распределение (Stone)
-            for (let q = shortageResources.length - 1; q >= 0; q--) {
-                if (targetVillageIds !== null && !targetVillageIds.includes(villagesData[q].id)) continue;
-                for (var d = 0; d < merchantOrders.length; d++) {
-                    merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
-                }
-                merchantOrders.sort((l, r) => l.distance - r.distance);
-                if (shortageResources[q][1].stone > 0) {
-                    while (shortageResources[q][1].stone > 0) {
-                        var totalstoneToTrade = 0;
-                        for (var m = 0; m < merchantOrders.length; m++) {
-                            totalstoneToTrade += merchantOrders[m].stone;
-                            if (merchantOrders[m].stone > 0) {
-                                if (shortageResources[q][1].stone <= merchantOrders[m].stone * 1000) {
-                                    links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "stone": shortageResources[q][1].stone });
-                                    merchantOrders[m].stone -= shortageResources[q][1].stone / 1000;
-                                    shortageResources[q][1].stone = 0;
-                                } else {
-                                    links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "stone": merchantOrders[m].stone * 1000 });
-                                    shortageResources[q][1].stone -= merchantOrders[m].stone * 1000;
-                                    merchantOrders[m].stone = 0;
-                                }
-                            }
-                            if (shortageResources[q][1].stone <= 0) break;
-                            if (m == merchantOrders.length - 1 && shortageResources[q][1].stone > 0) { totalstoneToTrade = 0; break; }
-                        }
-                        if (totalstoneToTrade == 0) { q = 0; break; }
-                    }
-                }
-            }
-
-            // Распределение (Iron)
-            for (let q = shortageResources.length - 1; q >= 0; q--) {
-                if (targetVillageIds !== null && !targetVillageIds.includes(villagesData[q].id)) continue;
-                for (let d = 0; d < merchantOrders.length; d++) {
-                    merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
-                }
-                merchantOrders.sort((l, r) => l.distance - r.distance);
-                if (shortageResources[q][2].iron > 0) {
-                    while (shortageResources[q][2].iron > 0) {
-                        var totalironToTrade = 0;
-                        for (let m = 0; m < merchantOrders.length; m++) {
-                            totalironToTrade += merchantOrders[m].iron;
-                            if (merchantOrders[m].iron > 0) {
-                                if (shortageResources[q][2].iron <= merchantOrders[m].iron * 1000) {
-                                    links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "iron": shortageResources[q][2].iron });
-                                    merchantOrders[m].iron -= shortageResources[q][2].iron / 1000;
-                                    shortageResources[q][2].iron = 0;
-                                } else {
-                                    links.push({ "source": merchantOrders[m].villageID, "target": villageID[q], "iron": merchantOrders[m].iron * 1000 });
-                                    shortageResources[q][2].iron -= merchantOrders[m].iron * 1000;
-                                    merchantOrders[m].iron = 0;
-                                }
-                            }
-                            if (shortageResources[q][2].iron <= 0) break;
-                            if (m == merchantOrders.length - 1 && shortageResources[q][2].iron > 0) { totalironToTrade = 0; break; }
-                        }
-                        if (totalironToTrade == 0) { q = 0; break; }
-                    }
-                }
-            }
-            $("#progress").remove();
-
-            var groupOptionsHTML = `<option value="all">Все группы</option>`;
-            for (let g = 0; g < availableGroups.length; g++) {
-                groupOptionsHTML += `<option value="${availableGroups[g].id}">${availableGroups[g].name}</option>`;
-            }
-
-            htmlCode = `<div id="restart">${totalsAndAverages}</div>
-                <div id="sendResources" class="flex-container sophHeader" style="position: relative">
-                    <button class="sophRowA collapsible" style="width: 250px;min-width: 230px;">Открыть меню настроек</button>
-                    <div class="content submenu" style="width: 500px;height:550px;z-index:99999">
-                        <form id="settings">
-                            <table style="border-spacing: 2px;">
-                            <tr><td style="padding: 6px;"><label for="isMinting">Игнорировать настройки</label></td><td style="padding: 6px;"><input type="checkbox" name="isMinting"></td></tr>
-                            <tr><td style="padding: 6px;"><label for="donorGroup">Донор (откуда):</label></td><td style="padding: 6px;"><select name="donorGroup" id="donorGroupSelect" style="width:160px; color:black;">${groupOptionsHTML}</select></td></tr>
-                            <tr><td style="padding: 6px;"><label for="targetGroup">Получатель (куда):</label></td><td style="padding: 6px;"><select name="targetGroup" id="targetGroupSelect" style="width:160px; color:black;">${groupOptionsHTML}</select></td></tr>
-                            <tr><td style="padding: 6px;"><label for="lowPoints">Приоритет</label></td><td style="padding: 6px;"><input type="range" min="0" max="13000" step="10" value="${settings.lowPoints}" class="slider" name="lowPoints" oninput="sliderChange('lowPoints',this.value)">< <output id="lowPoints"></output> очков</td></tr>
-                            <tr><td style="padding: 6px;"><label for="highPoints">Готовые деревни</label></td><td style="padding: 6px;"><input type="range" min="0" max="13000" step="10" value="${settings.highPoints}" class="slider" name="highPoints" oninput="sliderChange('highPoints',this.value)">> <output id="highPoints"></output> очков</td></tr>
-                            <tr><td style="padding: 6px;"><label for="highFarm">Высокая ферма</label></td><td style="padding: 6px;"><input type="range" min="0" max="33000" step="10" value="${settings.highFarm}" class="slider" name="highFarm" oninput="sliderChange('highFarm',this.value)"><output id="highFarm"></output> нас.</td></tr>
-                            <tr><td style="padding: 6px;"><label for="builtOutPercentage">Вместимость склада (горизонт. деревни): </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.builtOutPercentage}" class="slider" name="builtOutPercentage" oninput="sliderChange('builtOutPercentage',this.value)"><output id="builtOutPercentage"></output></td></tr>
-                            <tr><td style="padding: 6px;"><label for="needsMorePercentage">Вместимость склада (приорит. деревни): </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.needsMorePercentage}" class="slider" name="needsMorePercentage" oninput="sliderChange('needsMorePercentage',this.value)"><output id="needsMorePercentage"></output></td></tr>
-                            <tr><td style="padding: 6px;"><input type="button" class="btn evt-confirm-btn btn-confirm-yes" value="Сохранить" onclick="saveSettings();"/></td></tr>
-                            <tr><td colspan="2" style="padding: 6px; text-align: center;"><input type="button" class="btn btnSophie btn-confirm-yes" value="Автоотправка" onclick="autoSendResources();" style="width: 100%; padding: 6px;"/></td></tr>
-                            </table>
-                        </form>
-                    </div>
-                    <input type="button" class="btn btnSophie btn-confirm-yes" value="Автоотправка" onclick="autoSendResources();" style="margin-right: 10px; padding: 6px 15px; font-weight: bold;"/>
-                </div>
-                <table id="tableSend" width="100%" class="sophHeader">
-                <tbody id="appendHere">
-                    <tr><td class="sophHeader" colspan=7 width="550" style="text-align:center">${langShinko[0]}</td></tr>
-                    <tr>
-                        <td class="sophHeader" width="25%" style="text-align:center">${langShinko[1]}</td>
-                        <td class="sophHeader" width="25%" style="text-align:center">${langShinko[2]}</td>
-                        <td class="sophHeader" width="5%" style="text-align:center">${langShinko[3]}</td>
-                        <td class="sophHeader" width="10%" style="text-align:center">${langShinko[4]}</td>
-                        <td class="sophHeader" width="10%" style="text-align:center">${langShinko[5]}</td>
-                        <td class="sophHeader" width="10%" style="text-align:center">${langShinko[6]}</td>
-                        <td class="sophHeader" width="10%"><font size="1">${langShinko[8]}</font></td>
-                    </tr>
-                </tbody>
-            </table>`;
-
-            $("#content_value").eq(0).prepend(htmlCode);
-            if (is_mobile == true) { $("#mobile_header").eq(0).prepend(htmlCode); }
-
-            $("input[name='isMinting']").attr("checked", settings.isMinting);
-            $("#donorGroupSelect").val(settings.donorGroup);
-            $("#targetGroupSelect").val(settings.targetGroup);
-            $("#lowPoints").val(settings.lowPoints);
-            $("#highPoints").val(settings.highPoints);
-            $("#highFarm").val(settings.highFarm);
-            $("#builtOutPercentage").val(settings.builtOutPercentage);
-            $("#needsMorePercentage").val(settings.needsMorePercentage);
-            makeThingsCollapsible();
-            createList();
         });
     });
 }
@@ -721,6 +913,13 @@ function createList() {
                 targetIron = villagesData[property].iron; targetCapacity = villagesData[property].warehouseCapacity;
             }
         }
+        // Если цель была получена по координатам (Файл 2), targetName берем из sendBack[1]
+        if (settings.sendToCoord && sendBack && cleanLinks[i].target == sendBack[0]) {
+            targetName = sendBack[1];
+            targetURL = "#";
+            targetWood = 0; targetStone = 0; targetIron = 0; targetCapacity = 0;
+        }
+
         listHTML += `
         <tr ${tempRow} height="40">
             <td><a href="${sourceURL}" class="sophLink">${sourceName} </a></td>
@@ -729,7 +928,7 @@ function createList() {
             <td width="50" style="text-align:center">${cleanLinks[i].wood}<span class="icon header wood"> </span></td>
             <td width="50" style="text-align:center">${cleanLinks[i].stone}<span class="icon header stone"> </span></td>
             <td width="50" style="text-align:center">${cleanLinks[i].iron}<span class="icon header iron"> </span></td>
-            <td style="text-align:center"><input type="button" class="btn btnSophie" id="building" tabindex="-1" value="${langShinko[7]}" onclick="sendResource(${cleanLinks[i].source},${cleanLinks[i].target},${cleanLinks[i].wood},${cleanLinks[i].stone},${cleanLinks[i].iron},${i})"></td>
+            <td style="text-align:center"><input type="button" class="btn btnSophie" id="building" tabindex="-1" value="${langInterface[7]}" onclick="sendResource(${cleanLinks[i].source},${cleanLinks[i].target},${cleanLinks[i].wood},${cleanLinks[i].stone},${cleanLinks[i].iron},${i})"></td>
         </tr>`;
     }
     $("#appendHere").eq(0).append(listHTML);
@@ -737,19 +936,21 @@ function createList() {
         $(':button[id^="building"]')[0].focus();
     }
 
-    for (let i = 0; i < shortageResources.length; i++) {
-        if (parseInt(shortageResources[i][0].wood) + parseInt(shortageResources[i][1].stone) + parseInt(shortageResources[i][2].iron) != 0)
-            stillShortage.push([villagesData[i].name, shortageResources[i]]);
-    }
-    for (let i = 0; i < excessResources.length; i++) {
-        if (parseInt(excessResources[i][0].wood) + parseInt(excessResources[i][1].stone) + parseInt(excessResources[i][2].iron) != 0)
-            stillExcess.push([villagesData[i].name, excessResources[i]]);
-    }
+    if (!settings.sendToCoord) {
+        for (let i = 0; i < shortageResources.length; i++) {
+            if (parseInt(shortageResources[i][0].wood) + parseInt(shortageResources[i][1].stone) + parseInt(shortageResources[i][2].iron) != 0)
+                stillShortage.push([villagesData[i].name, shortageResources[i]]);
+        }
+        for (let i = 0; i < excessResources.length; i++) {
+            if (parseInt(excessResources[i][0].wood) + parseInt(excessResources[i][1].stone) + parseInt(excessResources[i][2].iron) != 0)
+                stillExcess.push([villagesData[i].name, excessResources[i]]);
+        }
 
-    $("#totals").eq(0).append(`<div id='aftermath'><center>
-        <button type="button" class="btn btnSophie" name="showStats" style="padding: 10px;width: 300px" onclick="showStats()">Показать излишки/дефицит</button>
-        <button type="button" class="btn btnSophie" name="showEndResult" style="padding: 10px;width: 300px" onclick="resAfterBalance()">Показать результат баланса</button>
-        </center></div>`);
+        $("#totals").eq(0).append(`<div id='aftermath'><center>
+            <button type="button" class="btn btnSophie" name="showStats" style="padding: 10px;width: 300px" onclick="showStats()">Показать излишки/дефицит</button>
+            <button type="button" class="btn btnSophie" name="showEndResult" style="padding: 10px;width: 300px" onclick="resAfterBalance()">Показать результат баланса</button>
+            </center></div>`);
+    }
 }
 
 displayEverything();
@@ -763,10 +964,20 @@ function addDistanceToArray(array) {
         for (let property in villagesData) {
             if (villagesData[property].id == array[i].source) { sourceName = villagesData[property].name; }
         }
-        for (let property in villagesData) {
-            if (villagesData[property].id == array[i].target) { targetName = villagesData[property].name; }
+        var targetCoordMatch = null;
+        if (settings.sendToCoord && sendBack && array[i].target == sendBack[0]) {
+            targetCoordMatch = [null, sendBack[5], sendBack[6]];
+        } else {
+            for (let property in villagesData) {
+                if (villagesData[property].id == array[i].target) { 
+                    targetCoordMatch = villagesData[property].name.match(/(\d+)\|(\d+)/); 
+                }
+            }
         }
-        array[i].distance = checkDistance(sourceName.match(/(\d+)\|(\d+)/)[1], sourceName.match(/(\d+)\|(\d+)/)[2], targetName.match(/(\d+)\|(\d+)/)[1], targetName.match(/(\d+)\|(\d+)/)[2]);
+        var sCoord = sourceName.match(/(\d+)\|(\d+)/);
+        if (sCoord && targetCoordMatch) {
+            array[i].distance = checkDistance(sCoord[1], sCoord[2], targetCoordMatch[1], targetCoordMatch[2]);
+        }
     }
     return array;
 }
@@ -808,6 +1019,9 @@ function makeThingsCollapsible() {
 function saveSettings() {
     tempArray = $("#settings").serializeArray();
     settings.isMinting = $("input[name='isMinting']")[0].checked;
+    settings.sendToCoord = $("input[name='sendToCoord']")[0].checked;
+    settings.targetCoordinate = $("#targetCoordinateInput").val() || "";
+    settings.resLimit = parseInt($("#resLimitInput").val() || 0);
     settings.donorGroup = $("#donorGroupSelect").val();
     settings.targetGroup = $("#targetGroupSelect").val();
     settings.lowPoints = parseInt($("#settings input[name='lowPoints']").val() || tempArray[3].value);
@@ -820,6 +1034,7 @@ function saveSettings() {
     $(".flex-container").remove();
     $("div[id*='restart']").remove();
     $("div[id*='sendResources']").remove();
+    $("div[id*='resourceSender']").remove();
     init();
     displayEverything();
 }
