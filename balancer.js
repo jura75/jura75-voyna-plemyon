@@ -1,5 +1,5 @@
-// Updated: Combined WH Balancer (File 1) with Coordinate Target & Minting Res Logic / Counter (File 2)
-console.log("Latest update: Combined WH Balancer & Coordinate Minting Sender");
+// Updated: Combined WH Balancer & Coordinate Minting Sender (Fixed Group Filtering Bug)
+console.log("Latest update: Combined WH Balancer & Coordinate Minting Sender - Fixed Groups");
 var testPage;
 var is_mobile = !!navigator.userAgent.match(/iphone|android|blackberry/ig) || false;
 var warehouseCapacity = [];
@@ -25,13 +25,11 @@ var cleanLinks = [];
 var stillShortage = [];
 var stillExcess = [];
 
-// Счетчики отправленных ресурсов и данные цели (из Файла 2)
 var totalWoodSent = 0; 
 var totalStoneSent = 0; 
 var totalIronSent = 0;
 var sendBack = null;
 
-// Процентные соотношения для чеканки/отправок (Файл 2)
 if (typeof woodPercentage == 'undefined') {
     var woodPercentage = 28000 / 83000;
     var stonePercentage = 30000 / 83000;
@@ -79,20 +77,26 @@ function cleanup() {
     cleanLinks = [];
 }
 
-// Функция сброса групп в состояние "Все группы" и перезагрузки интерфейса
+function removeUIElements() {
+    $("#sophBalancerWrapper").remove();
+    $("#totals").remove();
+    $("#restart").remove();
+    $("#sendResources").remove();
+    $("#resourceSender").remove();
+    $("#playerTarget").remove();
+    $("#tableSend").remove();
+    $("#progressbar").remove();
+}
+
 function resetGroupsAndReload() {
     settings.donorGroup = "all";
     settings.targetGroup = "all";
     localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
-    $(".flex-container").remove();
-    $("div[id*='restart']").remove();
-    $("div[id*='sendResources']").remove();
-    $("div[id*='resourceSender']").remove();
+    removeUIElements();
     init();
     displayEverything();
 }
 
-// Перевод интерфейса на русский язык
 var langInterface = [
     "Балансировщик склада",
     "Деревня-источник",
@@ -116,10 +120,9 @@ var langInterface = [
     "Оставить складов (%)"
 ];
 
-// colors for UI
 if (typeof colors == 'undefined') {
     cssClassesSophie = `
-<style>
+<style id="sophSophieStyles">
 .sophRowA { background-color: #32353b; color: white; }
 .sophRowB { background-color: #36393f; color: white; }
 .sophHeader { background-color: #202225; font-weight: bold; color: white; }
@@ -136,11 +139,13 @@ if (typeof colors == 'undefined') {
 .submenu { display: flex; flex-direction: column; position: absolute; left: 0px; top: 37px; min-width: 240px; }
 </style>`;
 } else {
-    cssClassesSophie = `<style>.sophRowA { background-color: #32353b; color: white; } .sophRowB { background-color: #36393f; color: white; } .sophHeader { background-color: #202225; font-weight: bold; color: white; } .sophLink { color:#40D0E0; }</style>`;
+    cssClassesSophie = `<style id="sophSophieStyles">.sophRowA { background-color: #32353b; color: white; } .sophRowB { background-color: #36393f; color: white; } .sophHeader { background-color: #202225; font-weight: bold; color: white; } .sophLink { color:#40D0E0; }</style>`;
 }
 
-$("#contentContainer").eq(0).prepend(cssClassesSophie);
-$("#mobileHeader").eq(0).prepend(cssClassesSophie);
+if ($("#sophSophieStyles").length === 0) {
+    $("#contentContainer").eq(0).prepend(cssClassesSophie);
+    $("#mobileHeader").eq(0).prepend(cssClassesSophie);
+}
 
 if (localStorage.getItem("settingsWHBalancerSophie") != null) {
     tempArray = JSON.parse(localStorage.getItem("settingsWHBalancerSophie"));
@@ -187,14 +192,7 @@ if (settings.sendToCoord === undefined) settings.sendToCoord = false;
 if (!settings.targetCoordinate) settings.targetCoordinate = "";
 if (settings.resLimit === undefined) settings.resLimit = 0;
 
-if ($("#sendResources")[0]) {
-    $("#sendResources")[0].remove();
-    $("#tableSend")[0].remove();
-    $("#totals")[0].remove();
-}
-if ($("#resourceSender")[0]) {
-    $("#resourceSender")[0].remove();
-}
+removeUIElements();
 
 if (game_data.player.sitter > 0) {
     URLIncRes = `game.php?t=${game_data.player.id}&screen=overview_villages&mode=trader&type=inc&page=-1&type=inc`;
@@ -204,7 +202,6 @@ if (game_data.player.sitter > 0) {
     URLProd = `game.php?&screen=overview_villages&mode=prod&page=-1&`;
 }
 
-// Функция отправки ресурса с обновлением счетчиков (интеграция из Файла 2)
 function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, rowNr) {
     $("#" + rowNr)[0].remove();
     var e = { "target_id": targetID, "wood": woodAmount, "stone": stoneAmount, "iron": ironAmount };
@@ -214,7 +211,6 @@ function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, r
             UI.SuccessMessage(e.message);
             console.log(e.message);
             
-            // Обновляем счетчики отправленных ресурсов (Файл 2)
             totalWoodSent += woodAmount;
             totalStoneSent += stoneAmount;
             totalIronSent += ironAmount;
@@ -245,7 +241,6 @@ function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, r
     }, 150);
 }
 
-// Функция автоматической отправки ресурсов
 function autoSendResources() {
     var buttons = $(':button[id^="building"]');
     if (buttons.length === 0) {
@@ -273,7 +268,6 @@ function autoSendResources() {
     sendNext();
 }
 
-// Функция расчета ресурсов с учетом процента остатка склада и мерчантов (из Файла 2)
 function calculateResAmounts(wood, stone, iron, warehouse, merchants) {
     var merchantCarry = merchants * 1000;
     var leaveBehindRes = Math.floor(warehouse / 100 * settings.resLimit);
@@ -310,7 +304,6 @@ function calculateResAmounts(wood, stone, iron, warehouse, merchants) {
     return { "wood": Math.floor(merchantWood), "stone": Math.floor(merchantStone), "iron": Math.floor(merchantIron) };
 }
 
-// Получение ID и данных целевой деревни по координатам через API (Файл 2)
 function fetchTargetAndDisplay(coordinate, callback) {
     var sitterID = game_data.player.sitter > 0 ? 
         `game.php?t=${game_data.player.id}&screen=api&ajax=target_selection&input=${coordinate}&type=coord` : 
@@ -324,6 +317,8 @@ function fetchTargetAndDisplay(coordinate, callback) {
 }
 
 function displayEverything() {
+    removeUIElements();
+
     $.get(URLIncRes, function () {
         console.log("Grabbed transport page");
     }).done(function (page) {
@@ -376,7 +371,6 @@ function displayEverything() {
         }).done(function (page) {
             testPage = page;
             
-            // Парсинг доступных групп (Файл 1)
             var availableGroups = [];
             var availableGroupsMap = {};
             function extractGroups($container) {
@@ -474,7 +468,6 @@ function displayEverything() {
 
             villagesData.sort((a, b) => (parseInt(a.points) < parseInt(b.points)) ? 1 : -1);
 
-            // Функция продолжения построения списка после возможной подгрузки координат
             var proceedBuilding = function() {
                 totalWood = 0; totalStone = 0; totalIron = 0;
                 for (let i in allWoodTotals) { totalWood += parseInt(allWoodTotals[i]); }
@@ -489,7 +482,6 @@ function displayEverything() {
                 stoneAverage = Math.floor(totalStone / warehouseCapacity.length);
                 ironAverage = Math.floor(totalIron / warehouseCapacity.length);
 
-                // Если включена отправка строго по координатам (Файл 2)
                 if (settings.sendToCoord && sendBack && sendBack[0]) {
                     var donorVillageIds = null;
                     if (settings.donorGroup !== "all") {
@@ -508,7 +500,7 @@ function displayEverything() {
 
                     for (let p = 0; p < villagesData.length; p++) {
                         if (donorVillageIds !== null && !donorVillageIds.includes(villagesData[p].id)) continue;
-                        if (villagesData[p].id == sendBack[0]) continue; // Не шлем в саму себя
+                        if (villagesData[p].id == sendBack[0]) continue;
 
                         var res = calculateResAmounts(
                             parseInt(villagesData[p].wood), 
@@ -532,7 +524,6 @@ function displayEverything() {
                         }
                     }
                 } else {
-                    // Стандартная логика балансировщика Файла 1
                     if (settings.isMinting == false) {
                         actualWoodAverage = woodAverage;
                         actualStoneAverage = stoneAverage;
@@ -578,10 +569,9 @@ function displayEverything() {
                         <td>${langInterface[13]}: ${numberWithCommas(stoneAverage)}</td>
                         <td>${langInterface[14]}: ${numberWithCommas(ironAverage)}</td>
                         </tr>
-                        </table>`;
+                        </table></div>`;
 
                     $(".content-border").eq(0).prepend(`<div id="progressbar" style="width: 100%; background-color: #36393f;"><div id="progress" style="width: 0%; height: 35px; background-color: #4CAF50; text-align: center; line-height: 32px; color: black;"></div></div>`);
-                    $("#mobileHeader").eq(0).prepend(`<div id="progressbar" style="width: 100%; background-color: #36393f;"><div id="progress" style="width: 0%; height: 35px; background-color: #4CAF50; text-align: center; line-height: 32px; color: black;"></div></div>`);
 
                     for (let v = 0; v < villagesData.length; v++) {
                         excessResources[v] = [];
@@ -646,6 +636,7 @@ function displayEverything() {
                             });
                         }
                         
+                        // ИСПРАВЛЕНО: теперь заполняется targetVillageIds вместо donorVillageIds
                         if (settings.targetGroup !== "all") {
                             var tUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.targetGroup;
                             $.ajax({
@@ -680,7 +671,9 @@ function displayEverything() {
                     }
 
                     for (let q = shortageResources.length - 1; q >= 0; q--) {
-                        $("#progress").css("width", `${(shortageResources.length - q) / shortageResources.length * 100}%`);
+                        if ($("#progress").length > 0) {
+                            $("#progress").css("width", `${(shortageResources.length - q) / shortageResources.length * 100}%`);
+                        }
                         if (targetVillageIds !== null && !targetVillageIds.includes(villagesData[q].id)) continue;
 
                         for (let d = 0; d < merchantOrders.length; d++) {
@@ -771,7 +764,7 @@ function displayEverything() {
                             }
                         }
                     }
-                    $("#progress").remove();
+                    $("#progressbar").remove();
                 }
 
                 var groupOptionsHTML = `<option value="all">Все группы</option>`;
@@ -779,7 +772,6 @@ function displayEverything() {
                     groupOptionsHTML += `<option value="${availableGroups[g].id}">${availableGroups[g].name}</option>`;
                 }
 
-                // Блок счетчика отправленных ресурсов (Файл 2), отображается при включенных координатах или по желанию
                 var playerTargetHTML = "";
                 if (settings.sendToCoord && sendBack) {
                     playerTargetHTML = `<table id="playerTarget" width="100%" class="sophHeader" style="margin-bottom: 5px;">
@@ -807,7 +799,7 @@ function displayEverything() {
                     </table>`;
                 }
 
-                htmlCode = `<div id="restart">${totalsAndAverages}</div>
+                var uiContentHTML = `
                     <div id="sendResources" class="flex-container sophHeader" style="position: relative">
                         <button class="sophRowA collapsible" style="width: 250px;min-width: 230px;">Открыть меню настроек</button>
                         <div class="content submenu" style="width: 520px;height:620px;z-index:99999">
@@ -847,8 +839,18 @@ function displayEverything() {
                     </tbody>
                 </table>`;
 
-                $("#content_value").eq(0).prepend(htmlCode);
-                if (is_mobile == true) { $("#mobile_header").eq(0).prepend(htmlCode); }
+                htmlCode = `<div id="sophBalancerWrapper">
+                    <div id="restart">${totalsAndAverages}</div>
+                    ${uiContentHTML}
+                </div>`;
+
+                if ($("#content_value").length > 0) {
+                    $("#content_value").eq(0).prepend(htmlCode);
+                } else if ($("#mobileHeader").length > 0) {
+                    $("#mobileHeader").eq(0).prepend(htmlCode);
+                } else {
+                    $("#contentContainer").eq(0).prepend(htmlCode);
+                }
 
                 $("input[name='isMinting']").attr("checked", settings.isMinting);
                 $("input[name='sendToCoord']").attr("checked", settings.sendToCoord);
@@ -865,7 +867,6 @@ function displayEverything() {
                 createList();
             };
 
-            // Если включен режим отправки строго по координатам, подгружаем цель перед построением списка
             if (settings.sendToCoord && settings.targetCoordinate.match(/\d+\|\d+/)) {
                 fetchTargetAndDisplay(settings.targetCoordinate, function() {
                     proceedBuilding();
@@ -913,7 +914,6 @@ function createList() {
                 targetIron = villagesData[property].iron; targetCapacity = villagesData[property].warehouseCapacity;
             }
         }
-        // Если цель была получена по координатам (Файл 2), targetName берем из sendBack[1]
         if (settings.sendToCoord && sendBack && cleanLinks[i].target == sendBack[0]) {
             targetName = sendBack[1];
             targetURL = "#";
@@ -1031,10 +1031,7 @@ function saveSettings() {
     settings.needsMorePercentage = parseFloat($("#settings input[name='needsMorePercentage']").val() || tempArray[7].value);
 
     localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
-    $(".flex-container").remove();
-    $("div[id*='restart']").remove();
-    $("div[id*='sendResources']").remove();
-    $("div[id*='resourceSender']").remove();
+    removeUIElements();
     init();
     displayEverything();
 }
