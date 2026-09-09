@@ -1,7 +1,18 @@
-// Updated: Combined WH Balancer & Coordinate Minting Sender (Fixed Group Filtering Bug)
-console.log("Latest update: Combined WH Balancer & Coordinate Minting Sender - Fixed Groups");
+// ==UserScript==
+// @name         TW Resource Balancer & Coordinate Sender (Fixed Groups)
+// @namespace    http://tampermonkey.net/
+// @version      1.91
+// @description  Исправленный балансировщик ресурсов с корректной фильтрацией по группам для Войны племён (сброс групп в "Все" при перезагрузке)
+// @match        https://*.plemiona.pl/*
+// @match        https://*.tribalwars.net/*
+// @match        https://*.voyna-plemen.ru/*
+// @grant        none
+// ==/UserScript==
+
+console.log("TW Resource Balancer: Groups & Routing Fixed");
 var testPage;
 var is_mobile = !!navigator.userAgent.match(/iphone|android|blackberry/ig) || false;
+var isSophieRunning = false;
 var warehouseCapacity = [];
 var allWoodTotals = [];
 var allClayTotals = [];
@@ -60,23 +71,6 @@ function init() {
     sendBack = null;
 }
 
-function cleanup() {
-    warehouseCapacity = [];
-    allWoodTotals = [];
-    allClayTotals = [];
-    allIronTotals = [];
-    availableMerchants = [];
-    totalMerchants = [];
-    farmSpaceUsed = [];
-    farmSpaceTotal = [];
-    villagePoints = [];
-    villageID = [];
-    incomingRes = {};
-    merchantOrders = [];
-    links = [];
-    cleanLinks = [];
-}
-
 function removeUIElements() {
     $("#sophBalancerWrapper").remove();
     $("#totals").remove();
@@ -92,8 +86,17 @@ function resetGroupsAndReload() {
     settings.donorGroup = "all";
     settings.targetGroup = "all";
     localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
+    
+    if (window.history && window.history.replaceState) {
+        var cleanUrl = game_data.player.sitter > 0 ? 
+            `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod` : 
+            `game.php?screen=overview_villages&mode=prod`;
+        window.history.replaceState({}, "", cleanUrl);
+    }
+
     removeUIElements();
     init();
+    isSophieRunning = false;
     displayEverything();
 }
 
@@ -148,7 +151,7 @@ if ($("#sophSophieStyles").length === 0) {
 }
 
 if (localStorage.getItem("settingsWHBalancerSophie") != null) {
-    tempArray = JSON.parse(localStorage.getItem("settingsWHBalancerSophie"));
+    let tempArray = JSON.parse(localStorage.getItem("settingsWHBalancerSophie"));
     var settings = {};
     settings.isMinting = tempArray.isMinting;
     settings.lowPoints = parseInt(tempArray.lowPoints);
@@ -156,8 +159,9 @@ if (localStorage.getItem("settingsWHBalancerSophie") != null) {
     settings.highFarm = parseInt(tempArray.highFarm);
     settings.builtOutPercentage = parseFloat(tempArray.builtOutPercentage);
     settings.needsMorePercentage = parseFloat(tempArray.needsMorePercentage);
-    settings.donorGroup = tempArray.donorGroup !== undefined ? tempArray.donorGroup : "all";
-    settings.targetGroup = tempArray.targetGroup !== undefined ? tempArray.targetGroup : "all";
+    // Принудительно сбрасываем группы в "all" при каждой загрузке
+    settings.donorGroup = "all";
+    settings.targetGroup = "all";
     settings.sendToCoord = tempArray.sendToCoord !== undefined ? tempArray.sendToCoord : false;
     settings.targetCoordinate = tempArray.targetCoordinate !== undefined ? tempArray.targetCoordinate : "";
     settings.resLimit = tempArray.resLimit !== undefined ? parseInt(tempArray.resLimit) : 0;
@@ -186,8 +190,8 @@ if (!settings.highPoints) settings.highPoints = 12000;
 if (!settings.lowPoints) settings.lowPoints = 1;
 if (!settings.builtOutPercentage) settings.builtOutPercentage = 0.20;
 if (!settings.needsMorePercentage) settings.needsMorePercentage = 0.85;
-if (!settings.donorGroup) settings.donorGroup = "all";
-if (!settings.targetGroup) settings.targetGroup = "all";
+settings.donorGroup = "all";
+settings.targetGroup = "all";
 if (settings.sendToCoord === undefined) settings.sendToCoord = false;
 if (!settings.targetCoordinate) settings.targetCoordinate = "";
 if (settings.resLimit === undefined) settings.resLimit = 0;
@@ -195,21 +199,22 @@ if (settings.resLimit === undefined) settings.resLimit = 0;
 removeUIElements();
 
 if (game_data.player.sitter > 0) {
-    URLIncRes = `game.php?t=${game_data.player.id}&screen=overview_villages&mode=trader&type=inc&page=-1&type=inc`;
-    URLProd = `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&page=-1&`;
+    var URLIncRes = `game.php?t=${game_data.player.id}&screen=overview_villages&mode=trader&type=inc&page=-1&type=inc`;
+    var URLProd = `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&page=-1&`;
 } else {
-    URLIncRes = "game.php?&screen=overview_villages&mode=trader&type=inc&page=-1&type=inc";
-    URLProd = `game.php?&screen=overview_villages&mode=prod&page=-1&`;
+    var URLIncRes = "game.php?&screen=overview_villages&mode=trader&type=inc&page=-1&type=inc";
+    var URLProd = `game.php?&screen=overview_villages&mode=prod&page=-1&`;
 }
 
 function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, rowNr) {
-    $("#" + rowNr)[0].remove();
+    if ($("#" + rowNr).length > 0) {
+        $("#" + rowNr)[0].remove();
+    }
     var e = { "target_id": targetID, "wood": woodAmount, "stone": stoneAmount, "iron": ironAmount };
     TribalWars.post("market", {
             ajaxaction: "map_send", village: sourceID
         }, e, function (e) {
             UI.SuccessMessage(e.message);
-            console.log(e.message);
             
             totalWoodSent += woodAmount;
             totalStoneSent += stoneAmount;
@@ -317,6 +322,9 @@ function fetchTargetAndDisplay(coordinate, callback) {
 }
 
 function displayEverything() {
+    if (isSophieRunning) return;
+    isSophieRunning = true;
+
     removeUIElements();
 
     $.get(URLIncRes, function () {
@@ -387,18 +395,18 @@ function displayEverything() {
             extractGroups($(page));
             extractGroups($(document));
 
-            uniVillage = $(page).find("span.bonus_icon_33");
-            uniRow = uniVillage.length > 0 ? uniVillage.closest('tr').index() - 1 : -1;
+            var uniVillage = $(page).find("span.bonus_icon_33");
+            var uniRow = uniVillage.length > 0 ? uniVillage.closest('tr').index() - 1 : -1;
 
             if ($("#mobileHeader")[0]) {
                 allWoodObjects = $(page).find(".res.mwood,.warn_90.mwood,.warn.mwood");
                 allClayObjects = $(page).find(".res.mstone,.warn_90.mstone,.warn.mstone");
                 allIronObjects = $(page).find(".res.miron,.warn_90.miron,.warn.miron");
-                allWarehouses = $(page).find(".mheader.ressources");
+                let allWarehouses = $(page).find(".mheader.ressources");
                 allVillages = $(page).find(".quickedit-vn");
-                allFarms = $(page).find(".header.population");
-                allMerchants = $(page).find('.trader_img').parent();
-                productionTable = $(page).find(".points-header");
+                let allFarms = $(page).find(".header.population");
+                let allMerchants = $(page).find('.trader_img').parent();
+                let productionTable = $(page).find(".points-header");
                 if (uniRow >= 0) {
                     allVillages.splice(uniRow, 1);
                     allWoodObjects.splice(uniRow, 1);
@@ -478,21 +486,22 @@ function displayEverything() {
                     totalStone += incomingRes[Object.keys(incomingRes)[o]].stone;
                     totalIron += incomingRes[Object.keys(incomingRes)[o]].iron;
                 }
-                woodAverage = Math.floor(totalWood / warehouseCapacity.length);
-                stoneAverage = Math.floor(totalStone / warehouseCapacity.length);
-                ironAverage = Math.floor(totalIron / warehouseCapacity.length);
+                var woodAverage = Math.floor(totalWood / warehouseCapacity.length);
+                var stoneAverage = Math.floor(totalStone / warehouseCapacity.length);
+                var ironAverage = Math.floor(totalIron / warehouseCapacity.length);
 
                 if (settings.sendToCoord && sendBack && sendBack[0]) {
                     var donorVillageIds = null;
                     if (settings.donorGroup !== "all") {
-                        var dUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.donorGroup;
+                        var dUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&page=-1&group=` : `game.php?screen=overview_villages&mode=prod&page=-1&group=`) + settings.donorGroup;
                         $.ajax({
                             url: dUrl,
                             async: false,
                             success: function(data) {
                                 donorVillageIds = [];
                                 $(data).find(".quickedit-vn").each(function() {
-                                    donorVillageIds.push($(this).data("id").toString());
+                                    let vId = $(this).data("id");
+                                    if (vId) donorVillageIds.push(vId.toString());
                                 });
                             }
                         });
@@ -524,16 +533,17 @@ function displayEverything() {
                         }
                     }
                 } else {
+                    var actualWoodAverage = woodAverage;
+                    var actualStoneAverage = stoneAverage;
+                    var actualIronAverage = ironAverage;
+
                     if (settings.isMinting == false) {
-                        actualWoodAverage = woodAverage;
-                        actualStoneAverage = stoneAverage;
-                        actualIronAverage = ironAverage;
-                        actualTotalWood = totalWood;
-                        actualTotalStone = totalStone;
-                        actualTotalIron = totalIron;
-                        actualWHCountNeedsBalancingWood = warehouseCapacity.length;
-                        actualWHCountNeedsBalancingStone = warehouseCapacity.length;
-                        actualWHCountNeedsBalancingIron = warehouseCapacity.length;
+                        var actualTotalWood = totalWood;
+                        var actualTotalStone = totalStone;
+                        var actualTotalIron = totalIron;
+                        var actualWHCountNeedsBalancingWood = warehouseCapacity.length;
+                        var actualWHCountNeedsBalancingStone = warehouseCapacity.length;
+                        var actualWHCountNeedsBalancingIron = warehouseCapacity.length;
                         for (let i = 0; i < warehouseCapacity.length; i++) {
                             actualWoodAverage = Math.floor(actualTotalWood / actualWHCountNeedsBalancingWood);
                             actualStoneAverage = Math.floor(actualTotalStone / actualWHCountNeedsBalancingStone);
@@ -551,10 +561,6 @@ function displayEverything() {
                                 actualWHCountNeedsBalancingIron--;
                             }
                         }
-                    } else {
-                        actualWoodAverage = woodAverage;
-                        actualStoneAverage = stoneAverage;
-                        actualIronAverage = ironAverage;
                     }
 
                     totalsAndAverages = `<div id='totals' class='sophHeader' border=0>
@@ -577,19 +583,19 @@ function displayEverything() {
                         excessResources[v] = [];
                         shortageResources[v] = [];
                         villageID.push(villagesData[v].id);
-                        incomingWood = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].wood : 0;
-                        incomingStone = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].stone : 0;
-                        incomingIron = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].iron : 0;
+                        let incomingWood = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].wood : 0;
+                        let incomingStone = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].stone : 0;
+                        let incomingIron = incomingRes[villagesData[v].id] ? incomingRes[villagesData[v].id].iron : 0;
 
-                        tempWood = (actualWoodAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
+                        let tempWood = (actualWoodAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
                             parseInt(villagesData[v].wood) + incomingWood - actualWoodAverage : 
                             -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingWood - parseInt(villagesData[v].wood));
 
-                        tempStone = (actualStoneAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
+                        let tempStone = (actualStoneAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
                             parseInt(villagesData[v].stone) + incomingStone - actualStoneAverage : 
                             -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingStone - parseInt(villagesData[v].stone));
 
-                        tempIron = (actualIronAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
+                        let tempIron = (actualIronAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) ? 
                             parseInt(villagesData[v].iron) + incomingIron - actualIronAverage : 
                             -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingIron - parseInt(villagesData[v].iron));
 
@@ -621,50 +627,49 @@ function displayEverything() {
                     var donorVillageIds = null;
                     var targetVillageIds = null;
 
-                    if (settings.donorGroup !== "all" || settings.targetGroup !== "all") {
-                        if (settings.donorGroup !== "all") {
-                            var dUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.donorGroup;
-                            $.ajax({
-                                url: dUrl,
-                                async: false,
-                                success: function(data) {
-                                    donorVillageIds = [];
-                                    $(data).find(".quickedit-vn").each(function() {
-                                        donorVillageIds.push($(this).data("id").toString());
-                                    });
-                                }
-                            });
-                        }
-                        
-                        // ИСПРАВЛЕНО: теперь заполняется targetVillageIds вместо donorVillageIds
-                        if (settings.targetGroup !== "all") {
-                            var tUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=combined&page=-1&group=` : `game.php?screen=overview_villages&mode=combined&page=-1&group=`) + settings.targetGroup;
-                            $.ajax({
-                                url: tUrl,
-                                async: false,
-                                success: function(data) {
-                                    targetVillageIds = [];
-                                    $(data).find(".quickedit-vn").each(function() {
-                                        targetVillageIds.push($(this).data("id").toString());
-                                    });
-                                }
-                            });
-                        }
+                    if (settings.donorGroup !== "all") {
+                        let dUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&page=-1&group=` : `game.php?screen=overview_villages&mode=prod&page=-1&group=`) + settings.donorGroup;
+                        $.ajax({
+                            url: dUrl,
+                            async: false,
+                            success: function(data) {
+                                donorVillageIds = [];
+                                $(data).find(".quickedit-vn").each(function() {
+                                    let vId = $(this).data("id");
+                                    if (vId) donorVillageIds.push(vId.toString());
+                                });
+                            }
+                        });
+                    }
+                    
+                    if (settings.targetGroup !== "all") {
+                        let tUrl = (game_data.player.sitter > 0 ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&page=-1&group=` : `game.php?screen=overview_villages&mode=prod&page=-1&group=`) + settings.targetGroup;
+                        $.ajax({
+                            url: tUrl,
+                            async: false,
+                            success: function(data) {
+                                targetVillageIds = [];
+                                $(data).find(".quickedit-vn").each(function() {
+                                    let vId = $(this).data("id");
+                                    if (vId) targetVillageIds.push(vId.toString());
+                                });
+                            }
+                        });
                     }
 
                     for (let p = 0; p < excessResources.length; p++) {
                         if (donorVillageIds !== null && !donorVillageIds.includes(villagesData[p].id)) continue;
                         
-                        tempAllExcessCombined = parseInt(Math.floor(excessResources[p][0].wood / 1000) * 1000) + parseInt(Math.floor(excessResources[p][1].stone / 1000) * 1000) + parseInt(Math.floor(excessResources[p][2].iron / 1000) * 1000);
+                        let tempAllExcessCombined = parseInt(Math.floor(excessResources[p][0].wood / 1000) * 1000) + parseInt(Math.floor(excessResources[p][1].stone / 1000) * 1000) + parseInt(Math.floor(excessResources[p][2].iron / 1000) * 1000);
 
                         if (tempAllExcessCombined > 0) {
-                            tempMaxMerchantsNeeded = Math.floor(tempAllExcessCombined / 1000);
+                            let tempMaxMerchantsNeeded = Math.floor(tempAllExcessCombined / 1000);
                             if (tempMaxMerchantsNeeded < villagesData[p].availableMerchants) {
                                 merchantOrders.push({ "villageID": villagesData[p].id, "x": villagesData[p].name.match(/(\d+)\|(\d+)/)[1], "y": villagesData[p].name.match(/(\d+)\|(\d+)/)[2], "wood": Math.floor(excessResources[p][0].wood / 1000), "stone": Math.floor(excessResources[p][1].stone / 1000), "iron": Math.floor(excessResources[p][2].iron / 1000) });
                             } else {
-                                tempPercWood = excessResources[p][0].wood / tempAllExcessCombined;
-                                tempPercStone = excessResources[p][1].stone / tempAllExcessCombined;
-                                tempPercIron = excessResources[p][2].iron / tempAllExcessCombined;
+                                let tempPercWood = excessResources[p][0].wood / tempAllExcessCombined;
+                                let tempPercStone = excessResources[p][1].stone / tempAllExcessCombined;
+                                let tempPercIron = excessResources[p][2].iron / tempAllExcessCombined;
                                 merchantOrders.push({ "villageID": villagesData[p].id, "x": villagesData[p].name.match(/(\d+)\|(\d+)/)[1], "y": villagesData[p].name.match(/(\d+)\|(\d+)/)[2], "wood": Math.floor(tempPercWood * villagesData[p].availableMerchants), "stone": Math.floor(tempPercStone * villagesData[p].availableMerchants), "iron": Math.floor(tempPercIron * villagesData[p].availableMerchants) });
                             }
                         }
@@ -839,7 +844,7 @@ function displayEverything() {
                     </tbody>
                 </table>`;
 
-                htmlCode = `<div id="sophBalancerWrapper">
+                let htmlCode = `<div id="sophBalancerWrapper">
                     <div id="restart">${totalsAndAverages}</div>
                     ${uiContentHTML}
                 </div>`;
@@ -865,6 +870,8 @@ function displayEverything() {
                 $("#needsMorePercentage").val(settings.needsMorePercentage);
                 makeThingsCollapsible();
                 createList();
+                
+                isSophieRunning = false;
             };
 
             if (settings.sendToCoord && settings.targetCoordinate.match(/\d+\|\d+/)) {
@@ -874,7 +881,11 @@ function displayEverything() {
             } else {
                 proceedBuilding();
             }
+        }).fail(function() {
+            isSophieRunning = false;
         });
+    }).fail(function() {
+        isSophieRunning = false;
     });
 }
 
@@ -900,13 +911,15 @@ function createList() {
         cleanLinks.push(links[Object.keys(links)[i]]);
     }
     cleanLinks = addDistanceToArray(cleanLinks);
-    listHTML = ``;
+    let listHTML = ``;
     cleanLinks.sort((l, r) => l.distance - r.distance);
     for (let i = 0; i < cleanLinks.length; i++) {
-        tempRow = (i % 2 == 0) ? " id='" + i + "' class='sophRowB'" : " id='" + i + "' class='sophRowA'";
+        let tempRow = (i % 2 == 0) ? " id='" + i + "' class='sophRowB'" : " id='" + i + "' class='sophRowA'";
+        var sourceName = "", sourceURL = "";
         for (let property in villagesData) {
             if (villagesData[property].id == cleanLinks[i].source) { sourceName = villagesData[property].name; sourceURL = villagesData[property].url; }
         }
+        var targetName = "", targetURL = "", targetWood = 0, targetStone = 0, targetIron = 0, targetCapacity = 0;
         for (let property in villagesData) {
             if (villagesData[property].id == cleanLinks[i].target) {
                 targetName = villagesData[property].name; targetURL = villagesData[property].url;
@@ -961,6 +974,7 @@ function checkDistance(x1, y1, x2, y2) {
 
 function addDistanceToArray(array) {
     for (let i = 0; i < array.length; i++) {
+        var sourceName = "";
         for (let property in villagesData) {
             if (villagesData[property].id == array[i].source) { sourceName = villagesData[property].name; }
         }
@@ -990,14 +1004,14 @@ function numberWithCommas(x) {
 }
 
 function showStats() {
-    htmlStats = "<div class='sophRowA' style='width:800px' ><center><h1>Дефицит:</h1><table class='sophHeader'><tr class='sophHeader'><td>Название деревни</td><td>Ресурсы</td></tr>";
+    let htmlStats = "<div class='sophRowA' style='width:800px' ><center><h1>Дефицит:</h1><table class='sophHeader'><tr class='sophHeader'><td>Название деревни</td><td>Ресурсы</td></tr>";
     for (let i = 0; i < stillShortage.length; i++) {
-        tempRow = (i % 2 == 0) ? " id='" + i + "' class='sophRowB'" : " id='" + i + "' class='sophRowA'";
+        let tempRow = (i % 2 == 0) ? " id='" + i + "' class='sophRowB'" : " id='" + i + "' class='sophRowA'";
         htmlStats += `<tr ${tempRow} height="40"><td>${stillShortage[i][0]}</td><td>${stillShortage[i][1][0].wood} , ${stillShortage[i][1][1].stone} , ${stillShortage[i][1][2].iron}</td></tr>`;
     }
     htmlStats += "</table><h1>Излишки:</h1><table class='sophHeader'><tr class='sophHeader'><td>Название деревни</td><td>Ресурсы</td></tr>";
     for (let i = 0; i < stillExcess.length; i++) {
-        tempRow = (i % 2 == 0) ? " id='" + i + "' class='sophRowB'" : " id='" + i + "' class='sophRowA'";
+        let tempRow = (i % 2 == 0) ? " id='" + i + "' class='sophRowB'" : " id='" + i + "' class='sophRowA'";
         htmlStats += `<tr ${tempRow} height="40"><td>${stillExcess[i][0]}</td><td>${stillExcess[i][1][0].wood} , ${stillExcess[i][1][1].stone} , ${stillExcess[i][1][2].iron}</td></tr>`;
     }
     htmlStats += "</table></center></div>";
@@ -1017,7 +1031,7 @@ function makeThingsCollapsible() {
 }
 
 function saveSettings() {
-    tempArray = $("#settings").serializeArray();
+    let tempArray = $("#settings").serializeArray();
     settings.isMinting = $("input[name='isMinting']")[0].checked;
     settings.sendToCoord = $("input[name='sendToCoord']")[0].checked;
     settings.targetCoordinate = $("#targetCoordinateInput").val() || "";
@@ -1033,6 +1047,7 @@ function saveSettings() {
     localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
     removeUIElements();
     init();
+    isSophieRunning = false;
     displayEverything();
 }
 
@@ -1041,9 +1056,10 @@ function sliderChange(name, val) {
 }
 
 function resAfterBalance() {
-    resBalancedHTML = `<div class='sophRowA' style='width:800px' ><table style='width:100%'><tr class="sophHeader"><td>Деревня</td><td>Очки</td><td>Остаток торговцев</td><td colspan="3">Ресурсы</td><td>Вместимость склада</td></tr>`;
+    var resBalancedHTML = `<div class='sophRowA' style='width:800px' ><table style='width:100%'><tr class="sophHeader"><td>Деревня</td><td>Очки</td><td>Остаток торговцев</td><td colspan="3">Ресурсы</td><td>Вместимость склада</td></tr>`;
     for (var i = 0; i < villagesData.length; i++) {
-        thisMerchantLeft = villagesData[i].availableMerchants;
+        var thisMerchantLeft = villagesData[i].availableMerchants;
+        var thisVillageTotalWood, thisVillageTotalStone, thisVillageTotalIron;
         if (incomingRes[villagesData[i].id] != undefined) {
             thisVillageTotalWood = incomingRes[villagesData[i].id].wood + parseInt(villagesData[i].wood);
             thisVillageTotalStone = incomingRes[villagesData[i].id].stone + parseInt(villagesData[i].stone);
@@ -1066,7 +1082,7 @@ function resAfterBalance() {
                 thisMerchantLeft -= (cleanLinks[j].wood + cleanLinks[j].stone + cleanLinks[j].iron) / 1000;
             }
         }
-        tempRow = (i % 2 == 0) ? "class='sophRowB'" : "class='sophRowA'";
+        let tempRow = (i % 2 == 0) ? "class='sophRowB'" : "class='sophRowA'";
         resBalancedHTML += `
         <tr ${tempRow}>
             <td>${villagesData[i].name}</td>
