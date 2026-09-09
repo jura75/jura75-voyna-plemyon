@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TW Resource Balancer & Coordinate Sender (Fixed Groups)
 // @namespace    http://tampermonkey.net/
-// @version      1.91
-// @description  Исправленный балансировщик ресурсов с корректной фильтрацией по группам для Войны племён (сброс групп в "Все" при перезагрузке)
+// @version      1.92
+// @description  Исправленный балансировщик ресурсов с защитой от дублирования интерфейса для Войны племён
 // @match        https://*.plemiona.pl/*
 // @match        https://*.tribalwars.net/*
 // @match        https://*.voyna-plemen.ru/*
@@ -13,6 +13,7 @@ console.log("TW Resource Balancer: Groups & Routing Fixed");
 var testPage;
 var is_mobile = !!navigator.userAgent.match(/iphone|android|blackberry/ig) || false;
 var isSophieRunning = false;
+var isReloading = false; // Защита от повторного открытия дубликата
 var warehouseCapacity = [];
 var allWoodTotals = [];
 var allClayTotals = [];
@@ -83,6 +84,9 @@ function removeUIElements() {
 }
 
 function resetGroupsAndReload() {
+    if (isReloading) return;
+    isReloading = true;
+
     settings.donorGroup = "all";
     settings.targetGroup = "all";
     localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
@@ -98,6 +102,10 @@ function resetGroupsAndReload() {
     init();
     isSophieRunning = false;
     displayEverything();
+
+    setTimeout(function() {
+        isReloading = false;
+    }, 1000);
 }
 
 var langInterface = [
@@ -159,7 +167,6 @@ if (localStorage.getItem("settingsWHBalancerSophie") != null) {
     settings.highFarm = parseInt(tempArray.highFarm);
     settings.builtOutPercentage = parseFloat(tempArray.builtOutPercentage);
     settings.needsMorePercentage = parseFloat(tempArray.needsMorePercentage);
-    // Принудительно сбрасываем группы в "all" при каждой загрузке
     settings.donorGroup = "all";
     settings.targetGroup = "all";
     settings.sendToCoord = tempArray.sendToCoord !== undefined ? tempArray.sendToCoord : false;
