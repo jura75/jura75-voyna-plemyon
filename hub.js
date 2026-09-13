@@ -58,7 +58,7 @@ javascript:(function() {
                 ⏱️ <span>Авто-тайм (Атака)</span>
             </button>
             <button class="tw-hub-btn" data-action="9" style="background: #3b2812; border: 1px solid #7d510f; color: #f4e4bc; padding: 7px; text-align: left; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px;">
-                📋 <span>Простой планер</span>
+                ⚒️ <span>Простой планер</span>
             </button>
         </div>
 
