@@ -3,7 +3,7 @@ javascript:(function(){
         function t(e){for(var t=""+e;t.length<2;)t="0"+t;return t}
         var n=new Date(e);
         let finalMs = String(ms).padStart(3, '0');
-        return t(n.getDate())+"."+t(n.getMonth()+1)+" "+t(n.getHours())+":"+t(n.getMinutes())+":"+t(n.getSeconds())+"."+finalMs
+        return t(n.getUTCDate())+"."+t(n.getUTCMonth()+1)+" "+t(n.getUTCHours())+":"+t(n.getUTCMinutes())+":"+t(n.getUTCSeconds())+"."+finalMs
     };
     
     if ((game_data.screen == 'map' || game_data.screen == 'place') && $('#place_confirm_units').length > 0 && $('.sendTimeContainer').length == 0) {
@@ -19,7 +19,6 @@ javascript:(function(){
                 
                 var htmlRow = '<tr class="sendTimeContainer"><td>Verstuur:</td><td><span class="sendTime" style="font-weight:bold; color:#006600;">-</span>&nbsp;&nbsp;мс: <input type="text" id="manualMsInput" value="' + savedMs + '" style="width: 45px; text-align: center; font-weight: bold;" maxlength="3" title="Миллисекунды">&nbsp;&nbsp;<button type="button" id="autoClickToggle" class="btn" style="font-weight:bold; color: #b22222;">Автокликер: ВЫКЛ</button></td></tr>';
                 
-                // Добавили защиту от вылетов (e.preventDefault и e.stopPropagation)
                 $('form[action*="action=command"]').find('table').first().css('float', 'left').find('tr').last().after(htmlRow).closest('table').after($cc.find('table').parent().html() + '<br><div style="clear:both;"></div>').next().css({'float':'right', 'width': w, 'display': 'block', 'max-height': $('form[action*="action=command"]').find('table').first().height(), 'overflow': 'scroll'}).find('tr.command-row').on('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -48,28 +47,59 @@ javascript:(function(){
                     let durationText = "";
                     $('form[action*="action=command"]').find('table').find('tr').each(function(){
                         let text = $(this).text();
-                        if(text.includes('Длительность:') || text.includes('Duur:')) {
-                            let match = text.match(/\d+:\d{2}:\d{2}/);
-                            if(match) durationText = match[0];
+                        if(text.includes('Длительность:') || text.includes('Duur:') || text.includes('Dauer:') || text.includes('Duration:')) {
+                            durationText = text;
                         }
                     });
                     
-                    if(!durationText) return;
+                    let durationMs = 0;
+                    let matchDur = durationText.match(/(?:(\d+)[dдв:\s])?(\d+):(\d{2}):(\d{2})/);
+                    if(matchDur) {
+                        let days = matchDur[1] ? parseInt(matchDur[1], 10) : 0;
+                        let hours = parseInt(matchDur[2], 10);
+                        let minutes = parseInt(matchDur[3], 10);
+                        let seconds = parseInt(matchDur[4], 10);
+                        durationMs = ((days * 24 + hours) * 3600 + minutes * 60 + seconds) * 1000;
+                    } else {
+                        let simpleMatch = durationText.match(/(\d+):(\d{2}):(\d{2})/);
+                        if(simpleMatch) {
+                            durationMs = (parseInt(simpleMatch[1], 10) * 3600 + parseInt(simpleMatch[2], 10) * 60 + parseInt(simpleMatch[3], 10)) * 1000;
+                        }
+                    }
                     
-                    let dParts = durationText.split(':');
-                    let durationMs = (parseInt(dParts[0], 10) * 3600 + parseInt(dParts[1], 10) * 60 + parseInt(dParts[2], 10)) * 1000;
+                    if(!durationMs) return;
                     
                     let commandText = $selectedCommand.text();
                     let timeMatch = commandText.match(/(\d{2}):(\d{2}):(\d{2})/);
                     
                     if(!timeMatch) return;
                     
-                    let now = new Date();
-                    let arrivalDate = new Date(now);
-                    arrivalDate.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10), parseInt(timeMatch[3], 10), 0);
+                    let serverTime = typeof Timing !== 'undefined' && Timing.getCurrentServerTime ? Timing.getCurrentServerTime() : new Date().getTime();
                     
-                    if(commandText.includes('завтра')) {
-                        arrivalDate.setDate(arrivalDate.getDate() + 1);
+                    let targetHours = parseInt(timeMatch[1], 10);
+                    let targetMinutes = parseInt(timeMatch[2], 10);
+                    let targetSeconds = parseInt(timeMatch[3], 10);
+                    
+                    let arrivalDate = new Date(serverTime);
+                    arrivalDate.setUTCHours(targetHours, targetMinutes, targetSeconds, 0);
+                    
+                    // Улучшенный парсер суточных/дневных настроек
+                    let dateMatch = commandText.match(/(\d{1,2})\.(\d{1,2})\./);
+                    let isTomorrow = /завтра|morgen|tomorrow|jutro|demain|mañana|amanhã/i.test(commandText);
+                    let isToday = /сегодня|today|heute|aujourd'hui|hoy|hoje/i.test(commandText);
+                    
+                    if (dateMatch) {
+                        let targetDay = parseInt(dateMatch[1], 10);
+                        let targetMonth = parseInt(dateMatch[2], 10) - 1;
+                        arrivalDate.setUTCMonth(targetMonth, targetDay);
+                        // Если дата по какой-то причине оказалась в прошлом, переносим на следующий год/месяц
+                        if (arrivalDate.getTime() < serverTime - 86400000) {
+                            arrivalDate.setUTCMonth(arrivalDate.getUTCMonth() + 1);
+                        }
+                    } else if (isTomorrow) {
+                        arrivalDate.setUTCDate(arrivalDate.getUTCDate() + 1);
+                    } else if (!isToday && arrivalDate.getTime() < serverTime) {
+                        arrivalDate.setUTCDate(arrivalDate.getUTCDate() + 1);
                     }
                     
                     targetSendTimestamp = arrivalDate.getTime() - durationMs + manualMs;
@@ -90,15 +120,28 @@ javascript:(function(){
                         return;
                     }
                     
+                    var serverTime = typeof Timing !== 'undefined' && Timing.getCurrentServerTime ? Timing.getCurrentServerTime() : new Date().getTime();
+                    if (targetSendTimestamp <= serverTime) {
+                        alert("Ошибка: Время отправки этого приказа уже прошло!");
+                        return;
+                    }
+                    
                     isAutoClickActive = !isAutoClickActive;
                     
                     if (isAutoClickActive) {
                         $(this).text('Автокликер: ВКЛ').css('color', '#006600');
                         
                         autoClickTimer = setInterval(function() {
-                            var serverTime = typeof Timing !== 'undefined' && Timing.getCurrentServerTime ? Timing.getCurrentServerTime() : new Date().getTime();
+                            var currentServerTime = typeof Timing !== 'undefined' && Timing.getCurrentServerTime ? Timing.getCurrentServerTime() : new Date().getTime();
                             
-                            if (targetSendTimestamp - serverTime <= 20) {
+                            if (currentServerTime > targetSendTimestamp) {
+                                clearInterval(autoClickTimer);
+                                isAutoClickActive = false;
+                                $('#autoClickToggle').text('Автокликер: ВЫКЛ').css('color', '#b22222');
+                                return;
+                            }
+                            
+                            if (targetSendTimestamp - currentServerTime <= 20) {
                                 clearInterval(autoClickTimer);
                                 
                                 var $submitBtn = $('#place_confirm_submit');
