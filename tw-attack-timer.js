@@ -33,7 +33,7 @@ javascript:(function() {
     var savedMs = localStorage.getItem('tw_manual_ms') || '100';
 
     function initScriptPanel(htmlContent) {
-        var $cc = htmlContent ? $(htmlContent).find('.commands-container') : $('.commands-container');
+        var $cc = htmlContent ? $(htmlContent).find('.commands-container') :$('.commands-container');
         
         let arrTimeText = "";
         let durText = "";
@@ -49,7 +49,7 @@ javascript:(function() {
             }
         });
 
-        let nowServer = (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) ? new Date(Timing.getCurrentServerTime()) : new Date();
+        let nowServer = (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) ? new Date(Timing.getCurrentServerTime() + 3600000) : new Date(Date.now() + 3600000);
         let pad = n => n < 10 ? '0' + n : n;
         let todayDateStr = pad(nowServer.getDate()) + '.' + pad(nowServer.getMonth() + 1) + '.' + String(nowServer.getFullYear()).slice(-2);
 
@@ -60,7 +60,7 @@ javascript:(function() {
             boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
         }).html(
             '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #804000;padding-bottom:4px;margin-bottom:8px;">' +
-            '<b style="color:#804000;font-size:12px;">⏱️ Тактический Тайминг</b>' +
+            '<b style="color:#804000;font-size:12px;">⏱️ Тактический Тайминг (+1)</b>' +
             '<span onclick="$(\'#twTimingBox\').remove()" style="cursor:pointer;color:#804000;font-weight:bold;font-size:12px;">✖</span></div>' +
             '<div style="font-size:10px;color:#666;margin-bottom:6px;text-align:center;">Время сервера: <span id="server-clock" style="font-family:monospace;font-weight:bold;">00:00:00.000</span></div>' +
             '<div style="margin-bottom:6px;"><b style="font-size:11px;">Дата прихода (ДД.ММ.ГГ):</b><br><input type="text" id="tDate" value="' + todayDateStr + '" maxlength="10" style="width:100%;box-sizing:border-box;font-size:11px;padding:3px;text-align:center;font-weight:bold;"></div>' +
@@ -111,9 +111,8 @@ javascript:(function() {
             }).find('tr.command-row').on('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                var $selectedCommand = $(this);
-                $selectedCommand.closest('table').find('td').css('background-color', '');
-                $selectedCommand.find('td').css('background-color', '#FFF68F');
+                var $selectedCommand =$(this);
+                $selectedCommand.closest('table').find('td').css('background-color', '');$selectedCommand.find('td').css('background-color', '#FFF68F');
                 
                 let commandText = $selectedCommand.text();
                 let timeMatch = commandText.match(/(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?/);
@@ -150,9 +149,9 @@ javascript:(function() {
 
         function getServerTimeMs() {
             if (typeof Timing !== 'undefined' && typeof Timing.getCurrentServerTime === 'function') {
-                return Timing.getCurrentServerTime();
+                return Timing.getCurrentServerTime() + 3600000;
             }
-            return Date.now();
+            return Date.now() + 3600000;
         }
 
         function executeClick() {
